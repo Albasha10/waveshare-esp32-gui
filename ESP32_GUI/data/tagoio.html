@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TagoIO</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .topic-row { display:flex; align-items:center; gap:6px; margin-bottom:7px; font-size:13px; }
+    .topic-row label { min-width:36px; text-align:right; color:#555; font-weight:600; flex-shrink:0; }
+    .topic-row .topic-input { flex:1; min-width:120px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:13px; font-family:'Courier New',monospace; }
+    .topic-row .pub-input  { width:70px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; font-family:'Courier New',monospace; flex-shrink:0; }
+    .topic-row .pub-label  { font-size:10px; color:#aaa; flex-shrink:0; white-space:nowrap; }
+    .topic-row .topic-input:focus,
+    .topic-row .pub-input:focus  { outline:none; border-color:#2563eb; }
+    .topic-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#999; }
+    .topic-header span:first-child { min-width:36px; }
+    .topic-header .th-topic  { flex:1; }
+    .topic-header .th-pubms  { width:70px; text-align:center; flex-shrink:0; }
+    /* ── Modbus transport switch (RS485 / TCP) ── */
+    .mb-transport { display:flex; border:1px solid #d1d5db; border-radius:8px; overflow:hidden; margin-bottom:14px; }
+    .mb-transport button { flex:1; padding:9px 10px; border:0; background:#f9fafb; color:#4b5563; font-size:13px; font-weight:600; cursor:pointer; }
+    .mb-transport button + button { border-left:1px solid #d1d5db; }
+    .mb-transport button.active { background:#2563eb; color:#fff; }
+    .mb-transport button small { display:block; font-weight:400; font-size:11px; opacity:.8; }
+    .mb-transport button .live { display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-left:6px; vertical-align:middle; visibility:hidden; }
+    .mb-transport button.on .live { visibility:visible; }
+    .mb-info { font-size:12px; color:#888; margin-bottom:10px; line-height:1.6; }
+    .mb-test-result { margin-top:10px; font-size:12px; border-radius:6px; padding:8px 10px; display:none; }
+    .mb-test-result.ok  { display:block; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+    .mb-test-result.err { display:block; background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+    .mb-test-result.wait{ display:block; background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb; }
+    .btn-preset { padding:5px 10px; border:1px solid #2563eb; color:#2563eb; background:#fff; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-preset:hover { background:#eff6ff; }
+    .reg-flag { transform:scale(.8); transform-origin:left center; }
+    .flag-off { color:#9ca3af; text-decoration:line-through; }
+  </style>
+</head>
+<body>
+
+<nav class="topnav">
+  <img src="/shrdc_logo.png" alt="SHRDC">
+  <div class="topnav-links">
+    <a href="/"         class="nav-link">Dashboard</a>
+    <a href="/kpi"      class="nav-link">KPI</a>
+    <a href="/signals"  class="nav-link">Signal Status</a>
+    <a href="/iot"      class="nav-link">IoT Config</a>
+    <a href="/modbus"   class="nav-link">Modbus TCP</a>
+    <a href="/tagoio"   class="nav-link active">TagoIO</a>
+    <a href="/sdcard"   class="nav-link">SD Card</a>
+    <a href="/telegram" class="nav-link">Telegram</a>
+  </div>
+  <img src="/msf_logo.png" alt="MSF">
+  <div class="topnav-right">
+    <a href="/logout" class="btn-logout">Logout</a>
+  </div>
+</nav>
+
+<div class="container-wide">
+  <h1 style="margin-bottom:20px;">TagoIO</h1>
+
+  <div class="iot-cols">
+    <div class="iot-col">
+      <div class="iot-col-title">TagoIO Connection</div>
+      <!-- TagoIO: Modbus values straight to the cloud over WiFi -->
+      <div class="rs485-section">
+        <div class="rs485-section-title">
+          TagoIO (cloud)
+          <div class="title-actions">
+            <label class="sd-toggle" title="Send the Modbus values to TagoIO">
+              <input type="checkbox" id="tagoEnable" onchange="saveTago(true)">
+              <span class="sd-slider"></span>
+            </label>
+            <span id="tagoEnableLabel" style="font-size:11px;color:#555;margin-right:8px;">Off</span>
+            <span id="tagoBadge" class="device-status-badge unknown"><span class="device-status-dot"></span> Off</span>
+          </div>
+        </div>
+        <div class="mb-info">
+          Sends every enabled Modbus register to TagoIO over WiFi: on/off changes within 2 s, numbers at most every 10 s, everything every 5 min.
+          Variable name = register name in lowercase (e.g. <code>es0</code>, <code>tl_1_r</code>), plus <code>plc_online</code>.<br>
+          Status: <b><span id="tagoStatus">?</span></b>
+        </div>
+        <form id="tagoForm" onsubmit="event.preventDefault(); saveTago(false);">
+          <div class="rs-field-row">
+            <label>Device Token</label>
+            <input name="token" id="inpTagoToken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste the TagoIO device token" style="max-width:260px;">
+          </div>
+          <div class="rs-field-row">
+            <label>API URL</label>
+            <input name="url" id="inpTagoUrl" placeholder="https://api.tago.io/data" style="max-width:260px;">
+          </div>
+          <div class="rs-field-row">
+            <label>Region</label>
+            <select id="selTagoRegion" onchange="if(this.value)document.getElementById('inpTagoUrl').value=this.value;">
+              <option value="">&mdash; pick to fill the URL &mdash;</option>
+              <option value="https://api.tago.io/data">US East (api.tago.io)</option>
+              <option value="https://api.eu-w1.tago.io/data">Europe (api.eu-w1.tago.io)</option>
+            </select>
+            <span style="font-size:11px;color:#aaa;">Must match your TagoIO account &mdash; a wrong region gives &ldquo;rejected (401)&rdquo;</span>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button type="submit" class="btn-save-formula">Save TagoIO</button>
+            <button type="button" class="btn-clear-formula" onclick="clearTagoToken()">Remove token</button>
+            <span id="tagoMsg" style="font-size:12px;font-weight:700;"></span>
+          </div>
+        </form>
+      </div>
+      <div class="mb-info" style="margin-top:10px;">
+        The token is in TagoIO: <b>Devices</b> &rarr; your device &rarr; <b>General Information</b> &rarr; <b>Tokens</b>.
+        Data goes out over the board's WiFi; WiFi IP now: <b><span id="tagoWifi">?</span></b>.
+      </div>
+    </div>
+
+    <div class="iot-col-divider"></div>
+
+    <div class="iot-col">
+      <div class="iot-col-title">Variables sent</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+        <span id="tagoVarCount" style="font-size:12px;font-weight:700;color:#374151;"></span>
+        <button type="button" class="btn-clear-formula" onclick="setAllTago(true)">Send all</button>
+        <button type="button" class="btn-clear-formula" onclick="setAllTago(false)">Send none</button>
+      </div>
+      <div class="mb-info">Every enabled register on the <a href="/modbus">Modbus TCP</a> page becomes one TagoIO variable &mdash; untick <b>Send</b> to leave one out. On/off registers send their text (set with <b>Edit</b> on that page) instead of 1/0.</div>
+      <table class="mon-table" id="tagoVars">
+        <thead><tr><th>Send</th><th>TagoIO variable</th><th>Register</th><th>Value now</th></tr></thead>
+        <tbody id="tagoVarsBody"><tr><td colspan="4" style="color:#9ca3af;text-align:center;">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div><!-- /.iot-cols -->
+
+  <div class="site-footer">&copy; SHRDC. All rights reserved.</div>
+</div>
+
+<script>
+// ── shared helpers ────────────────────────────────────────────────
+let tcpEnabled = false, rtuEnabled = false;
+function setBadge(id, cls, text){
+  const b=document.getElementById(id); if(!b) return;
+  b.className='device-status-badge '+cls; b.innerHTML='<span class="device-status-dot"></span> '+text;
+}
+function markTransportLive(){}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// ── TagoIO ────────────────────────────────────────────────────────
+async function loadTago(first){
+  try{
+    const d=await (await fetch('/getTago')).json();
+    document.getElementById('tagoEnable').checked=d.enabled;
+    document.getElementById('tagoEnableLabel').textContent=d.enabled?'On':'Off';
+    if(first) document.getElementById('inpTagoUrl').value=d.url||'';
+    document.getElementById('inpTagoToken').placeholder = d.hasToken ? 'token saved - paste a new one to change' : 'paste the TagoIO device token';
+    document.getElementById('tagoStatus').textContent=d.status;
+    const st=d.status||'';
+    if(!d.enabled) setBadge('tagoBadge','unknown','Off');
+    else if(st.startsWith('OK')) setBadge('tagoBadge','connected','Sending');
+    else if(st.startsWith('rejected')||st.startsWith('failed')) setBadge('tagoBadge','disconnected','Error');
+    else setBadge('tagoBadge','unknown','Waiting');
+  }catch(e){}
+}
+async function saveTago(toggleOnly){
+  const msg=document.getElementById('tagoMsg'); msg.style.color='#555'; msg.textContent='Saving...';
+  const p=new URLSearchParams({enabled:document.getElementById('tagoEnable').checked?'1':'0'});
+  if(!toggleOnly){ p.set('token',document.getElementById('inpTagoToken').value); p.set('url',document.getElementById('inpTagoUrl').value); }
+  try{
+    const r=await fetch('/saveTago',{method:'POST',body:p});
+    if(!r.ok) throw new Error(await r.text());
+    msg.style.color='#16a34a'; msg.textContent='Saved'; document.getElementById('inpTagoToken').value='';
+    setTimeout(()=>{msg.textContent='';},2500); loadTago(false);
+  }catch(e){ msg.style.color='#dc2626'; msg.textContent=e.message||'Save failed'; }
+}
+async function clearTagoToken(){
+  if(!confirm('Remove the saved TagoIO token?')) return;
+  await fetch('/saveTago',{method:'POST',body:new URLSearchParams({clear:'1'})}); loadTago(false);
+}
+
+// ── Variables preview (same naming rule as the firmware: "AnalogIn1" -> "analog_in1") ──
+function tagoVarName(n){
+  let o='';
+  for(let i=0;i<n.length;i++){
+    let c=n[i];
+    if(/[A-Z]/.test(c) && i>0 && /[a-z]/.test(n[i-1])) o+='_';
+    c=c.toLowerCase(); o+=/[a-z0-9]/.test(c)?c:'_';
+  }
+  return o;
+}
+let tagoRegs=[], tagoSaving=false;
+function regForSave(r){ return {name:r.name,fc:r.fc,addr:r.addr,dt:r.dt,scale:r.scale,mqttTopic:r.mqttTopic||'',wr:r.wr,en:r.en,on:r.on||'',off:r.off||'',mqtt:r.mqtt!==false,tago:r.tago!==false,tv:r.tv||''}; }
+async function setTagoSend(i, on){
+  if(!tagoRegs[i]) return;
+  tagoSaving=true; tagoRegs[i].tago=on;
+  try{
+    const r=await fetch('/saveRS485Regs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tagoRegs.map(regForSave))});
+    if(!r.ok) throw new Error();
+  }catch(e){ alert('Save failed'); }
+  tagoSaving=false; loadTagoVars();
+}
+async function setAllTago(on){
+  if(!tagoRegs.length) return;
+  tagoSaving=true; tagoRegs.forEach(r=>r.tago=on);
+  try{ await fetch('/saveRS485Regs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tagoRegs.map(regForSave))}); }catch(e){ alert('Save failed'); }
+  tagoSaving=false; loadTagoVars();
+}
+async function loadTagoVars(){
+  if(tagoSaving) return;
+  try{
+    const [regs,t]=await Promise.all([fetch('/getRS485Regs').then(r=>r.json()), fetch('/getModbusTCP').then(r=>r.json())]);
+    if(tagoSaving) return;
+    tagoRegs=regs;
+    document.getElementById('tagoWifi').textContent = t.wifiIp || 'not connected';
+    const nOn=regs.filter(r=>r.en&&r.tago!==false).length, nEn=regs.filter(r=>r.en).length;
+    let html='<tr><td><input type="checkbox" checked disabled title="Always sent"></td><td><code>plc_online</code></td><td>PLC connection</td><td><b>'+
+             escHtml(t.enabled ? (t.deviceConnected?'true':'false') : 'polling off')+'</b></td></tr>';
+    regs.forEach((r,i)=>{
+      if(!r.en) return;
+      const send=r.tago!==false;
+      let v='--';
+      if(r.ok&&r.val!==null&&r.val!==undefined){
+        if(r.fc===1||r.fc===2) v = r.val ? (r.on||'1') : (r.off||'0');
+        else v = String((r.dt===0||r.dt===1)?Math.round(r.val):r.val);
+      }
+      html+='<tr'+(send?'':' class="flag-off"')+'><td><input type="checkbox" '+(send?'checked':'')+' onchange="setTagoSend('+i+',this.checked)"></td><td><code>'+
+            escHtml(r.tv?tagoVarName(r.tv):tagoVarName(r.name))+'</code></td><td>'+escHtml(r.name)+'</td><td><b>'+escHtml(send?v:'not sent')+'</b></td></tr>';
+    });
+    document.getElementById('tagoVarsBody').innerHTML = html;
+    document.getElementById('tagoVarCount').textContent = nOn+' of '+nEn+' registers sent';
+  }catch(e){}
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+loadTago(true); loadTagoVars();
+setInterval(()=>{if(document.visibilityState!=='hidden')loadTago(false);}, 3000);
+setInterval(()=>{if(document.visibilityState!=='hidden')loadTagoVars();}, 2000);
+</script>
+</body>
+</html>

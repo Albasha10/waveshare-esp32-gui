@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modbus TCP</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .topic-row { display:flex; align-items:center; gap:6px; margin-bottom:7px; font-size:13px; }
+    .topic-row label { min-width:36px; text-align:right; color:#555; font-weight:600; flex-shrink:0; }
+    .topic-row .topic-input { flex:1; min-width:120px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:13px; font-family:'Courier New',monospace; }
+    .topic-row .pub-input  { width:70px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; font-family:'Courier New',monospace; flex-shrink:0; }
+    .topic-row .pub-label  { font-size:10px; color:#aaa; flex-shrink:0; white-space:nowrap; }
+    .topic-row .topic-input:focus,
+    .topic-row .pub-input:focus  { outline:none; border-color:#2563eb; }
+    .topic-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#999; }
+    .topic-header span:first-child { min-width:36px; }
+    .topic-header .th-topic  { flex:1; }
+    .topic-header .th-pubms  { width:70px; text-align:center; flex-shrink:0; }
+    /* ── Modbus transport switch (RS485 / TCP) ── */
+    .mb-transport { display:flex; border:1px solid #d1d5db; border-radius:8px; overflow:hidden; margin-bottom:14px; }
+    .mb-transport button { flex:1; padding:9px 10px; border:0; background:#f9fafb; color:#4b5563; font-size:13px; font-weight:600; cursor:pointer; }
+    .mb-transport button + button { border-left:1px solid #d1d5db; }
+    .mb-transport button.active { background:#2563eb; color:#fff; }
+    .mb-transport button small { display:block; font-weight:400; font-size:11px; opacity:.8; }
+    .mb-transport button .live { display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-left:6px; vertical-align:middle; visibility:hidden; }
+    .mb-transport button.on .live { visibility:visible; }
+    .mb-info { font-size:12px; color:#888; margin-bottom:10px; line-height:1.6; }
+    .mb-test-result { margin-top:10px; font-size:12px; border-radius:6px; padding:8px 10px; display:none; }
+    .mb-test-result.ok  { display:block; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+    .mb-test-result.err { display:block; background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+    .mb-test-result.wait{ display:block; background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb; }
+    .btn-preset { padding:5px 10px; border:1px solid #2563eb; color:#2563eb; background:#fff; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-preset:hover { background:#eff6ff; }
+    .reg-flag { transform:scale(.8); transform-origin:left center; }
+    .flag-off { color:#9ca3af; text-decoration:line-through; }
+  </style>
+</head>
+<body>
+
+<nav class="topnav">
+  <img src="/shrdc_logo.png" alt="SHRDC">
+  <div class="topnav-links">
+    <a href="/"         class="nav-link">Dashboard</a>
+    <a href="/kpi"      class="nav-link">KPI</a>
+    <a href="/signals"  class="nav-link">Signal Status</a>
+    <a href="/iot"      class="nav-link">IoT Config</a>
+    <a href="/modbus"   class="nav-link active">Modbus TCP</a>
+    <a href="/tagoio"   class="nav-link">TagoIO</a>
+    <a href="/sdcard"   class="nav-link">SD Card</a>
+    <a href="/telegram" class="nav-link">Telegram</a>
+  </div>
+  <img src="/msf_logo.png" alt="MSF">
+  <div class="topnav-right">
+    <a href="/logout" class="btn-logout">Logout</a>
+  </div>
+</nav>
+
+<div class="container-wide">
+  <h1 style="margin-bottom:20px;">Modbus TCP</h1>
+
+  <div class="iot-cols">
+    <div class="iot-col">
+      <div class="iot-col-title">PLC Connection</div>
+      <div class="rs485-section">
+        <div class="rs485-section-title">
+          Modbus TCP Settings
+          <div class="title-actions">
+            <label class="sd-toggle" style="margin-left:6px;" title="Enable Modbus TCP polling">
+              <input type="checkbox" id="tcpEnableToggle" onchange="toggleTcpEnable()">
+              <span class="sd-slider"></span>
+            </label>
+            <span id="tcpEnableLabel" style="font-size:11px;color:#555;margin-right:8px;">Polling Off</span>
+            <span id="tcpStatusBadge" class="device-status-badge unknown">
+              <span class="device-status-dot"></span> Unknown
+            </span>
+          </div>
+        </div>
+
+        <div class="mb-info">
+          Active:&nbsp; PLC <b><span id="tcpActive">?</span></b> &nbsp;|&nbsp; Unit ID <b><span id="tcpUnitVal">?</span></b><br>
+          Reads OK / errors: <b><span id="tcpCounts">0 / 0</span></b> <span id="tcpLastErr" style="color:#b91c1c;"></span>
+        </div>
+
+        <form id="tcpForm">
+          <div class="rs-field-row">
+            <label>PLC IP Address</label>
+            <input name="ip" id="inpTcpIp" placeholder="e.g. 192.168.250.7" style="max-width:150px;" required>
+            <span style="font-size:11px;color:#aaa;">Modbus TCP server (the PLC)</span>
+          </div>
+          <div class="rs-field-row">
+            <label>Port</label>
+            <input type="number" name="port" id="inpTcpPort" min="1" max="65535" value="502" style="max-width:90px;">
+            <span style="font-size:11px;color:#aaa;">Standard Modbus TCP port is 502</span>
+          </div>
+          <div class="rs-field-row">
+            <label>Unit ID</label>
+            <input type="number" name="unitId" id="inpTcpUnit" min="0" max="255" value="1" style="max-width:70px;">
+            <span style="font-size:11px;color:#aaa;">Usually 1 for a PLC</span>
+          </div>
+          <div class="rs-field-row">
+            <label>Poll Interval</label>
+            <input type="number" name="pollInterval" id="inpTcpPoll" min="50" max="60000" value="500" style="max-width:90px;">
+            <span style="font-size:11px;color:#aaa;">ms &mdash; all enabled registers are read every interval</span>
+          </div>
+          <div class="rs-field-row">
+            <label>Publish Interval</label>
+            <input type="number" name="publishInterval" id="inpTcpPublish" min="100" max="60000" value="1000" style="max-width:90px;">
+            <span style="font-size:11px;color:#aaa;">ms between MQTT publishes per register</span>
+          </div>
+
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button type="submit" class="btn-save-formula">Save TCP Settings</button>
+            <button type="button" class="btn-clear-formula" id="btnTcpTest" onclick="testTcp()">Test Connection</button>
+            <span id="tcpSaveMsg" style="font-size:12px;font-weight:700;"></span>
+          </div>
+          <div id="tcpTestResult" class="mb-test-result"></div>
+        </form>
+      </div>
+
+    </div>
+
+    <div class="iot-col-divider"></div>
+
+    <div class="iot-col">
+      <div class="iot-col-title">Network</div>
+      <!-- Ethernet port of this gateway (PLC network) -->
+      <div class="rs485-section">
+        <div class="rs485-section-title">
+          Ethernet Port (PLC network)
+          <div class="title-actions">
+            <span id="ethStatusBadge" class="device-status-badge unknown">
+              <span class="device-status-dot"></span> Unknown
+            </span>
+          </div>
+        </div>
+        <div class="mb-info">
+          Ethernet IP now: <b><span id="ethCurIp">?</span></b> &nbsp;|&nbsp; WiFi IP: <b><span id="wifiCurIp">?</span></b><br>
+          The gateway must be on the same subnet as the PLC (e.g. PLC 192.168.250.7 &rarr; gateway 192.168.250.10).
+        </div>
+        <form id="ethForm">
+          <div class="rs-field-row">
+            <label>Address Mode</label>
+            <select name="dhcp" id="selEthMode" onchange="onEthModeChange()">
+              <option value="0">Fixed IP (recommended for PLC networks)</option>
+              <option value="1">DHCP (automatic)</option>
+            </select>
+          </div>
+          <div id="ethStaticFields">
+            <div class="rs-field-row">
+              <label>Gateway IP</label>
+              <input name="ip" id="inpEthIp" placeholder="e.g. 192.168.250.10" style="max-width:150px;">
+              <span style="font-size:11px;color:#aaa;">This device on the PLC network &mdash; must be unused</span>
+            </div>
+            <div class="rs-field-row">
+              <label>Subnet Mask</label>
+              <input name="mask" id="inpEthMask" placeholder="255.255.255.0" style="max-width:150px;">
+            </div>
+            <div class="rs-field-row">
+              <label>Router</label>
+              <input name="gw" id="inpEthGw" placeholder="leave empty" style="max-width:150px;">
+              <span style="font-size:11px;color:#aaa;">Leave empty so internet stays on WiFi</span>
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <button type="submit" class="btn-save-formula">Save &amp; Restart</button>
+            <span id="ethSaveMsg" style="font-size:12px;font-weight:700;margin-left:10px;"></span>
+          </div>
+        </form>
+      </div>
+      <div class="mb-info" style="margin-top:10px;">RS485 (serial) settings are on the <a href="/iot">IoT Config</a> page. TagoIO upload: <a href="/tagoio">TagoIO</a> page.</div>
+    </div>
+  </div><!-- /.iot-cols -->
+
+  <div class="iot-col-title" style="margin-top:26px;">Registers read from the PLC</div>
+      <!-- Modbus Registers -->
+      <div class="rs485-section">
+        <div class="rs485-section-title">
+          Modbus Registers
+          <span style="font-size:11px;background:#e0e7ff;color:#3730a3;border-radius:10px;padding:2px 8px;font-weight:600;" id="regCountBadge">0 registers</span>
+          <div class="title-actions">
+            <button class="btn-preset" onclick="loadStationPreset()" title="Fill the list with the NX1P2 mini station map (20 coils + 2 analog registers)">Load station preset</button>
+            <button class="btn-add-reg" id="btnAddReg" onclick="showAddForm(-1)">+ Add Register</button>
+          </div>
+        </div>
+
+        <div id="regTableWrap"></div>
+
+        <!-- Add/Edit form -->
+        <div id="addRegPanel" style="display:none;">
+          <h4 id="addFormTitle">Add New Register</h4>
+          <input type="hidden" id="fEditIdx" value="-1">
+
+          <div class="reg-form-row">
+            <label>Name</label>
+            <input id="fName" type="text" placeholder="e.g. Supply Voltage" maxlength="31">
+          </div>
+          <div class="reg-form-row">
+            <label>Function Code</label>
+            <select id="fFc" onchange="onFormFcChange()">
+              <option value="3">FC03 — Holding Register (read/write)</option>
+              <option value="4">FC04 — Input Register (read only)</option>
+              <option value="1">FC01 — Coil (read/write)</option>
+              <option value="2">FC02 — Discrete Input (read only)</option>
+            </select>
+          </div>
+          <div class="reg-form-row">
+            <label>Register Address</label>
+            <input id="fAddr" type="text" placeholder="e.g. 1 or 0x0001" style="max-width:120px;">
+            <span style="font-size:11px;color:#aaa;">Decimal or 0x hex</span>
+          </div>
+          <div class="reg-form-row" id="rowDataType">
+            <label>Data Type</label>
+            <select id="fDt" onchange="onFormDtChange()">
+              <option value="0">UINT16 — unsigned 16-bit integer</option>
+              <option value="1">INT16 — signed 16-bit integer</option>
+              <option value="2">FLOAT32 — IEEE 754 (2 registers)</option>
+              <option value="3">Scaled — UINT16 x scale factor</option>
+            </select>
+          </div>
+          <div class="reg-form-row" id="rowScale" style="display:none;">
+            <label>Scale Factor</label>
+            <input id="fScale" type="number" value="0.0001" step="any" style="max-width:110px;">
+            <span style="font-size:11px;color:#aaa;">Result = raw_uint16 x factor</span>
+          </div>
+          <div class="reg-form-row">
+            <label>TagoIO Variable</label>
+            <input id="fTagoVar" type="text" maxlength="31" spellcheck="false" autocomplete="off" style="max-width:200px;font-family:monospace;">
+            <span style="font-size:11px;color:#aaa;">Name of this value in TagoIO. Leave empty to use the register name. Changing it needs the TagoIO widget changed too.</span>
+          </div>
+          <div class="reg-form-row" id="rowBitText">
+            <label>Text for 1 / 0</label>
+            <input id="fOnTxt" type="text" placeholder="e.g. DETECT" maxlength="15" style="max-width:110px;">
+            <input id="fOffTxt" type="text" placeholder="e.g. CLEAR" maxlength="15" style="max-width:110px;">
+            <span style="font-size:11px;color:#aaa;">Optional &mdash; shown on the dashboards and sent to TagoIO instead of 1/0</span>
+          </div>
+          <div class="reg-form-row">
+            <label>MQTT Topic</label>
+            <input id="fMqttTopic" type="text" placeholder="e.g. esp32/rs485/voltage" spellcheck="false" autocomplete="off">
+            <span style="font-size:11px;color:#aaa;">Leave blank to skip publishing</span>
+          </div>
+          <div class="reg-form-row" id="rowWritable">
+            <label>Writable</label>
+            <label class="sd-toggle"><input type="checkbox" id="fWritable"><span class="sd-slider"></span></label>
+            <span style="font-size:12px;color:#555;margin-left:4px;">Allow writing from dashboard</span>
+          </div>
+          <div class="reg-form-row">
+            <label>Enabled</label>
+            <label class="sd-toggle"><input type="checkbox" id="fEnabled" checked><span class="sd-slider"></span></label>
+            <span style="font-size:12px;color:#555;margin-left:4px;">Poll this register</span>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn-save-formula" onclick="saveRegister()">Save Register</button>
+            <button class="btn-clear-formula" onclick="hideAddForm()">Cancel</button>
+            <span id="formMsg" style="font-size:12px;font-weight:700;line-height:2.2;margin-left:4px;"></span>
+          </div>
+        </div>
+
+        <div class="poll-status" id="pollStatus" style="display:none;">
+          <span class="poll-dot" id="pollDot"></span>
+          <span id="pollStatusText">Waiting for first poll...</span>
+        </div>
+      </div>
+
+
+  <div class="site-footer">&copy; SHRDC. All rights reserved.</div>
+</div>
+
+<script>
+// ── shared helpers ────────────────────────────────────────────────
+let tcpEnabled = false, rtuEnabled = false;
+function setBadge(id, cls, text){
+  const b=document.getElementById(id); if(!b) return;
+  b.className='device-status-badge '+cls; b.innerHTML='<span class="device-status-dot"></span> '+text;
+}
+function markTransportLive(){}
+let registers = [], writeRowIdx = -1;
+
+const FC_LABELS = {
+  1:{short:'FC01 Coil',cls:'fc-1'}, 2:{short:'FC02 Discrete',cls:'fc-2'},
+  3:{short:'FC03 Holding',cls:'fc-3'}, 4:{short:'FC04 Input',cls:'fc-4'}
+};
+const DT_LABELS = ['UINT16','INT16','FLOAT32','Scaled'];
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+async function loadRegisters() {
+  try { registers=await(await fetch('/getRS485Regs')).json(); renderRegTable(); } catch(e){console.error(e);}
+}
+
+async function pollRegisters() {
+  try {
+    const d=await(await fetch('/getRS485Regs')).json();
+    d.forEach((r,i)=>{if(registers[i]){registers[i].ok=r.ok;registers[i].val=r.val;registers[i].since=r.since;}});
+    updateLiveValues();
+    const anyOk=d.some(r=>r.en&&r.ok);
+    // the register list is shared: its results belong to whichever transport is polling
+    if(tcpEnabled){
+      if(d.length===0) setBadge('tcpStatusBadge','unknown','No Registers');
+      else setBadge('tcpStatusBadge', anyOk?'connected':'disconnected', anyOk?'PLC Connected':'Not Connected');
+    }
+    const badge=document.getElementById('deviceStatusBadge');
+    if(!badge){}
+    else if(!rtuEnabled){badge.className='device-status-badge unknown';badge.innerHTML='<span class="device-status-dot"></span> Polling Off';}
+    else if(d.length===0){badge.className='device-status-badge unknown';badge.innerHTML='<span class="device-status-dot"></span> No Registers';}
+    else if(anyOk){badge.className='device-status-badge connected';badge.innerHTML='<span class="device-status-dot"></span> Device Connected';}
+    else{badge.className='device-status-badge disconnected';badge.innerHTML='<span class="device-status-dot"></span> Not Connected';}
+    const dot=document.getElementById('pollDot');
+    if(dot){dot.classList.add('active');setTimeout(()=>dot.classList.remove('active'),300);}
+    const txt=document.getElementById('pollStatusText');
+    if(txt) txt.textContent='Last poll: '+new Date().toLocaleTimeString();
+  } catch(e){}
+}
+
+function regForSave(r){ return {name:r.name,fc:r.fc,addr:r.addr,dt:r.dt,scale:r.scale,mqttTopic:r.mqttTopic||'',wr:r.wr,en:r.en,on:r.on||'',off:r.off||'',mqtt:r.mqtt!==false,tago:r.tago!==false,tv:r.tv||''}; }
+// TagoIO variable from a name - same rule as the firmware ("AnalogIn1" -> "analog_in1", "Emergency button" -> "emergency_button")
+function tagoVarName(n){
+  let o=''; n=String(n||'');
+  for(let i=0;i<n.length;i++){
+    let c=n[i];
+    if(/[A-Z]/.test(c) && i>0 && /[a-z]/.test(n[i-1])) o+='_';
+    c=c.toLowerCase(); o+=/[a-z0-9]/.test(c)?c:'_';
+  }
+  return o;
+}
+// MQTT / TagoIO switch in the table: saves right away
+async function toggleRegFlag(i, key){
+  if(!registers[i]) return;
+  registers[i][key] = (registers[i][key]===false);
+  renderRegTable();
+  try{
+    const r=await fetch('/saveRS485Regs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(registers.map(regForSave))});
+    if(!r.ok) throw new Error();
+  }catch(e){ registers[i][key]=!registers[i][key]; renderRegTable(); alert('Save failed'); }
+}
+function flagSwitch(i, key, on, title){
+  return '<label class="sd-toggle reg-flag" title="'+title+'"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleRegFlag('+i+',\''+key+'\')"><span class="sd-slider"></span></label>';
+}
+function formatValue(r) {
+  if(r.val===null||r.val===undefined) return '--';
+  if(r.fc===1||r.fc===2) return r.val ? (r.on||'ON') : (r.off||'OFF');
+  const v=parseFloat(r.val);
+  if(r.dt===0||r.dt===1) return String(Math.round(v));
+  return v.toPrecision(6).replace(/\.?0+$/,'');
+}
+
+// "3m 12s", "1h 05m", "2d 3h" - time a signal has been in its current state
+function fmtSince(s){
+  if(s===undefined||s===null||s<0) return '';
+  if(s<60) return s+'s';
+  const m=Math.floor(s/60); if(m<60) return m+'m '+String(s%60).padStart(2,'0')+'s';
+  const h=Math.floor(m/60); if(h<24) return h+'h '+String(m%60).padStart(2,'0')+'m';
+  return Math.floor(h/24)+'d '+(h%24)+'h';
+}
+function updateLiveValues() {
+  registers.forEach((r,i)=>{
+    const el=document.getElementById('lv_'+i); if(!el) return;
+    if(!r.en) el.innerHTML='<span class="val-badge val-wait">disabled</span>';
+    else if(r.ok===true) el.innerHTML='<span class="val-badge val-ok">'+escHtml(formatValue(r))+'</span>'+
+      (((r.fc===1||r.fc===2)&&fmtSince(r.since))?'<br><small style="color:#6b7280;" title="Time in this state">for '+fmtSince(r.since)+'</small>':'');
+    else if(r.ok===false) el.innerHTML='<span class="val-badge val-err">Error</span>';
+    else el.innerHTML='<span class="val-badge val-wait">--</span>';
+  });
+}
+
+function renderRegTable() {
+  const wrap=document.getElementById('regTableWrap');
+  const badge=document.getElementById('regCountBadge');
+  badge.textContent=registers.length+' register'+(registers.length!==1?'s':'');
+  document.getElementById('pollStatus').style.display=registers.length>0?'flex':'none';
+  if(!registers.length){wrap.innerHTML='<div class="reg-empty">No registers configured yet. Click <b>+ Add Register</b> to get started.</div>';return;}
+  let html='<table class="reg-table"><thead><tr><th>#</th><th>Name</th><th>FC</th><th>Addr</th><th>Type</th><th>Mode</th><th>MQTT Topic</th><th title="Publish to MQTT (Node-RED)">MQTT</th><th title="Send to TagoIO">TagoIO</th><th>Raw Value</th><th>Actions</th></tr></thead><tbody>';
+  registers.forEach((r,i)=>{
+    const fcInfo=FC_LABELS[r.fc]||{short:'FC'+r.fc,cls:''};
+    const dtLabel=DT_LABELS[r.dt]||'UINT16';
+    const addrHex='0x'+(r.addr>>>0).toString(16).toUpperCase().padStart(4,'0');
+    const rwBadge=r.wr?'<span class="rw-badge rw-rw">R/W</span>':'<span class="rw-badge rw-ro">R</span>';
+    const disClass=r.en?'':'reg-row-disabled';
+    let valHtml='<span class="val-badge val-wait">--</span>';
+    if(!r.en) valHtml='<span class="val-badge val-wait">disabled</span>';
+    else if(r.ok) valHtml='<span class="val-badge val-ok">'+escHtml(formatValue(r))+'</span>';
+    else if(r.ok===false) valHtml='<span class="val-badge val-err">Error</span>';
+    const topicHtml=r.mqttTopic?'<code style="font-size:10px;background:#f0f0f0;padding:1px 5px;border-radius:3px;">'+escHtml(r.mqttTopic)+'</code>':'<span style="color:#ccc;font-size:11px;">—</span>';
+    let actHtml='<div style="display:flex;gap:3px;flex-wrap:wrap;">'+
+      '<button class="btn-reg-edit" onclick="showAddForm('+i+')">Edit</button>'+
+      '<button class="btn-reg-del"  onclick="deleteReg('+i+')">Del</button>';
+    if(r.wr&&(r.fc===1||r.fc===3)) actHtml+='<button class="btn-reg-write" onclick="toggleWriteRow('+i+')">Write</button>';
+    actHtml+='</div>';
+    html+='<tr class="'+disClass+'" id="regRow_'+i+'">'+
+      '<td style="color:#aaa;font-size:11px;">'+(i+1)+'</td>'+
+      '<td class="reg-name">'+escHtml(r.name)+((r.tv&&r.tv!==tagoVarName(r.name))?'<br><small style="color:#6b7280;font-weight:400;" title="TagoIO variable">TagoIO: <code>'+escHtml(r.tv)+'</code></small>':'')+'</td>'+
+      '<td><span class="fc-badge '+fcInfo.cls+'">'+fcInfo.short+'</span></td>'+
+      '<td class="reg-addr">'+addrHex+'<br><small style="color:#bbb;">'+r.addr+'</small></td>'+
+      '<td style="font-size:11px;">'+dtLabel+'</td>'+
+      '<td>'+rwBadge+'</td>'+
+      '<td>'+topicHtml+'</td>'+
+      '<td>'+(r.mqttTopic?flagSwitch(i,'mqtt',r.mqtt!==false,'Publish '+escHtml(r.name)+' to MQTT (Node-RED)'):'<span style="color:#ccc;font-size:11px;" title="No MQTT topic set">—</span>')+'</td>'+
+      '<td>'+flagSwitch(i,'tago',r.tago!==false,'Send '+escHtml(r.name)+' to TagoIO')+'</td>'+
+      '<td id="lv_'+i+'">'+valHtml+'</td>'+
+      '<td>'+actHtml+'</td>'+
+    '</tr>';
+  });
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+}
+
+// Write dialog
+function toggleWriteRow(idx) {
+  const ex=document.getElementById('writeRow_'+writeRowIdx);
+  if(ex) ex.remove();
+  if(writeRowIdx===idx){writeRowIdx=-1;return;} writeRowIdx=idx;
+  const r=registers[idx], srcRow=document.getElementById('regRow_'+idx); if(!srcRow) return;
+  const tr=document.createElement('tr'); tr.id='writeRow_'+idx; tr.className='write-row';
+  tr.innerHTML='<td colspan="11" style="padding:8px 12px;"><div class="write-inline">'+
+    '<span style="font-size:12px;font-weight:600;color:#c2410c;">Write to <b>'+escHtml(r.name)+'</b>:</span>'+
+    '<input id="writeVal_'+idx+'" type="number" placeholder="value" step="any">'+
+    '<button class="btn-write-confirm" onclick="doWrite('+idx+')">Send</button>'+
+    '<button class="btn-write-cancel"  onclick="toggleWriteRow(-99)">Cancel</button>'+
+    '<span class="write-result" id="writeResult_'+idx+'"></span>'+
+    '</div></td>';
+  srcRow.after(tr); document.getElementById('writeVal_'+idx).focus();
+}
+
+async function doWrite(idx) {
+  const valEl=document.getElementById('writeVal_'+idx), resEl=document.getElementById('writeResult_'+idx);
+  const val=valEl.value.trim();
+  if(val===''){resEl.className='write-result err';resEl.textContent='Enter a value';return;}
+  resEl.className='write-result'; resEl.textContent='Sending...';
+  try {
+    const r=await fetch('/writeRS485Reg',{method:'POST',body:new URLSearchParams({idx,val})});
+    const txt=await r.text();
+    if(r.ok){resEl.className='write-result ok';resEl.textContent='Written!';setTimeout(()=>toggleWriteRow(-99),1200);}
+    else{resEl.className='write-result err';resEl.textContent=txt;}
+  } catch(e){resEl.className='write-result err';resEl.textContent='Network error';}
+}
+
+// Add/Edit form
+function showAddForm(idx) {
+  const panel=document.getElementById('addRegPanel'), title=document.getElementById('addFormTitle');
+  document.getElementById('fEditIdx').value=idx;
+  document.getElementById('formMsg').textContent='';
+  if(idx>=0&&registers[idx]){
+    const r=registers[idx]; title.textContent='Edit Register — '+r.name;
+    document.getElementById('fName').value=r.name; document.getElementById('fFc').value=String(r.fc);
+    document.getElementById('fAddr').value=String(r.addr); document.getElementById('fDt').value=String(r.dt);
+    document.getElementById('fScale').value=r.scale; document.getElementById('fMqttTopic').value=r.mqttTopic||'';
+    document.getElementById('fTagoVar').value=r.tv||''; document.getElementById('fTagoVar').placeholder=tagoVarName(r.name);
+    document.getElementById('fWritable').checked=r.wr; document.getElementById('fEnabled').checked=r.en;
+    document.getElementById('fOnTxt').value=r.on||''; document.getElementById('fOffTxt').value=r.off||'';
+  } else {
+    title.textContent='Add New Register';
+    document.getElementById('fName').value=''; document.getElementById('fFc').value='3';
+    document.getElementById('fAddr').value=''; document.getElementById('fDt').value='0';
+    document.getElementById('fScale').value='0.0001'; document.getElementById('fMqttTopic').value='';
+    document.getElementById('fTagoVar').value=''; document.getElementById('fTagoVar').placeholder='made from the name';
+    document.getElementById('fWritable').checked=false; document.getElementById('fEnabled').checked=true;
+    document.getElementById('fOnTxt').value=''; document.getElementById('fOffTxt').value='';
+  }
+  onFormFcChange(); onFormDtChange();
+  panel.style.display=''; panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  document.getElementById('fName').focus();
+}
+
+function hideAddForm(){document.getElementById('addRegPanel').style.display='none';document.getElementById('fEditIdx').value=-1;}
+
+function onFormFcChange(){
+  const fc=parseInt(document.getElementById('fFc').value),isBit=(fc===1||fc===2);
+  document.getElementById('rowDataType').style.display=isBit?'none':'';
+  document.getElementById('rowBitText').style.display=isBit?'':'none';
+  if(fc===2||fc===4){document.getElementById('fWritable').checked=false;document.getElementById('rowWritable').style.opacity='0.4';document.getElementById('rowWritable').style.pointerEvents='none';}
+  else{document.getElementById('rowWritable').style.opacity='';document.getElementById('rowWritable').style.pointerEvents='';}
+  onFormDtChange();
+}
+
+function onFormDtChange(){
+  const fc=parseInt(document.getElementById('fFc').value),dt=parseInt(document.getElementById('fDt').value),isBit=(fc===1||fc===2);
+  document.getElementById('rowScale').style.display=(!isBit&&dt===3)?'':'none';
+}
+
+async function saveRegister(){
+  const msg=document.getElementById('formMsg');
+  const name=document.getElementById('fName').value.trim();
+  if(!name){msg.style.color='#dc2626';msg.textContent='Name required';return;}
+  const addrRaw=document.getElementById('fAddr').value.trim();
+  let addr=addrRaw.startsWith('0x')||addrRaw.startsWith('0X')?parseInt(addrRaw,16):parseInt(addrRaw,10);
+  if(isNaN(addr)||addr<0||addr>65535){msg.style.color='#dc2626';msg.textContent='Invalid address';return;}
+  const fc=parseInt(document.getElementById('fFc').value),dt=parseInt(document.getElementById('fDt').value);
+  const scale=parseFloat(document.getElementById('fScale').value);
+  const mqttTopic=document.getElementById('fMqttTopic').value.trim();
+  const wr=document.getElementById('fWritable').checked,en=document.getElementById('fEnabled').checked;
+  const editIdx=parseInt(document.getElementById('fEditIdx').value);
+  const isBit=(fc===1||fc===2);
+  const on=isBit?document.getElementById('fOnTxt').value.trim():'', off=isBit?document.getElementById('fOffTxt').value.trim():'';
+  let tv=tagoVarName(document.getElementById('fTagoVar').value.trim());
+  // renaming a register keeps its TagoIO variable, so existing TagoIO widgets keep working
+  if(!tv && editIdx>=0 && registers[editIdx] && registers[editIdx].name!==name) tv=registers[editIdx].tv||tagoVarName(registers[editIdx].name);
+  const reg={name,fc,addr,dt,scale:isNaN(scale)?1.0:scale,mqttTopic,wr,en,on,off,tv};
+  if(editIdx>=0) registers[editIdx]=Object.assign({},registers[editIdx],reg); else registers.push(reg);
+  msg.style.color='#555';msg.textContent='Saving...';
+  try {
+    const r=await fetch('/saveRS485Regs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(registers.map(regForSave))});
+    if(r.ok){msg.style.color='#16a34a';msg.textContent='Saved!';setTimeout(()=>{hideAddForm();loadRegisters();},700);}
+    else{msg.style.color='#dc2626';msg.textContent='Save failed';}
+  } catch(e){msg.style.color='#dc2626';msg.textContent='Network error';}
+}
+
+async function deleteReg(idx){
+  if(!confirm('Delete register "'+registers[idx].name+'"?')) return;
+  registers.splice(idx,1);
+  const wr=document.getElementById('writeRow_'+writeRowIdx); if(wr) wr.remove(); writeRowIdx=-1;
+  try {
+    await fetch('/saveRS485Regs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(registers.map(regForSave))});
+    loadRegisters();
+  } catch(e){alert('Delete failed');}
+}
+
+// ── Modbus TCP ────────────────────────────────────────────────────
+function onEthModeChange(){
+  document.getElementById('ethStaticFields').style.display = document.getElementById('selEthMode').value==='1' ? 'none' : '';
+}
+
+async function loadModbusTCP(first){
+  try {
+    const d = await (await fetch('/getModbusTCP')).json();
+    tcpEnabled = !!d.enabled;
+    if(first){
+      document.getElementById('inpTcpIp').value      = d.ip||'';
+      document.getElementById('inpTcpPort').value    = d.port||502;
+      document.getElementById('inpTcpUnit').value    = d.unitId??1;
+      document.getElementById('inpTcpPoll').value    = d.pollIntervalMs||500;
+      document.getElementById('inpTcpPublish').value = d.publishInterval||1000;
+      if(d.eth){
+        document.getElementById('selEthMode').value = d.eth.dhcp ? '1' : '0';
+        document.getElementById('inpEthIp').value   = d.eth.ip||'';
+        document.getElementById('inpEthMask').value = d.eth.mask||'255.255.255.0';
+        document.getElementById('inpEthGw').value   = d.eth.gw||'';
+        onEthModeChange();
+      }
+    }
+    document.getElementById('tcpActive').textContent  = (d.ip||'?')+':'+(d.port||502);
+    document.getElementById('tcpUnitVal').textContent = d.unitId??'?';
+    document.getElementById('tcpCounts').textContent  = (d.okCount||0)+' / '+(d.errCount||0);
+    document.getElementById('tcpLastErr').textContent = d.lastErr ? '(last error: '+d.lastErr+')' : '';
+    document.getElementById('tcpEnableToggle').checked = tcpEnabled;
+    document.getElementById('tcpEnableLabel').textContent = tcpEnabled ? 'Polling On' : 'Polling Off';
+    if(!tcpEnabled) setBadge('tcpStatusBadge','unknown','Polling Off');
+    else if(d.regCount===0) setBadge('tcpStatusBadge','unknown','No Registers');
+    else if(d.deviceConnected) setBadge('tcpStatusBadge','connected','PLC Connected');
+    else setBadge('tcpStatusBadge','disconnected','Not Connected');
+    if(d.eth){
+      document.getElementById('ethCurIp').textContent = d.eth.hasIp ? d.eth.curIp : 'none';
+      if(!d.eth.link) setBadge('ethStatusBadge','disconnected','No Cable');
+      else if(d.eth.hasIp) setBadge('ethStatusBadge','connected','Link Up');
+      else setBadge('ethStatusBadge','unknown','Link Up, No IP');
+    }
+    document.getElementById('wifiCurIp').textContent = d.wifiIp || 'not connected';
+    markTransportLive();
+  } catch(e) { console.error('loadModbusTCP:', e); }
+}
+
+async function toggleTcpEnable(){
+  const cb=document.getElementById('tcpEnableToggle'); cb.disabled=true;
+  try {
+    const state=(await (await fetch('/toggleModbusTCP',{method:'POST'})).text()).trim();
+    tcpEnabled = state==='1'; cb.checked = tcpEnabled;
+    document.getElementById('tcpEnableLabel').textContent = tcpEnabled ? 'Polling On' : 'Polling Off';
+    loadModbusTCP(false);
+  } catch(e){ cb.checked=!cb.checked; }
+  finally { cb.disabled=false; }
+}
+
+document.getElementById('tcpForm').onsubmit = async function(e){
+  e.preventDefault();
+  const msg=document.getElementById('tcpSaveMsg'); msg.style.color='#555'; msg.textContent='Saving...';
+  try {
+    const r=await fetch('/saveModbusTCP',{method:'POST',body:new URLSearchParams(new FormData(this))});
+    if(!r.ok) throw new Error(await r.text());
+    msg.style.color='#16a34a'; msg.textContent='Saved';
+    setTimeout(()=>{msg.textContent='';},2500);
+    loadModbusTCP(false);
+  } catch(err){ msg.style.color='#dc2626'; msg.textContent='Save failed'; }
+};
+
+async function testTcp(){
+  const box=document.getElementById('tcpTestResult'), btn=document.getElementById('btnTcpTest');
+  box.className='mb-test-result wait'; box.textContent='Testing connection to '+document.getElementById('inpTcpIp').value+'...';
+  btn.disabled=true;
+  try {
+    const f=document.getElementById('tcpForm');
+    const d=await (await fetch('/testModbusTCP',{method:'POST',body:new URLSearchParams({ip:f.ip.value,port:f.port.value,unitId:f.unitId.value})})).json();
+    box.className='mb-test-result '+(d.ok?'ok':'err'); box.textContent=d.msg;
+  } catch(e){ box.className='mb-test-result err'; box.textContent='Test failed: no answer from the gateway.'; }
+  finally { btn.disabled=false; }
+}
+
+document.getElementById('ethForm').onsubmit = async function(e){
+  e.preventDefault();
+  const msg=document.getElementById('ethSaveMsg'); msg.style.color='#555'; msg.textContent='Saving...';
+  try {
+    const r=await fetch('/saveEthernet',{method:'POST',body:new URLSearchParams(new FormData(this))});
+    const t=await r.text();
+    if(!r.ok){ msg.style.color='#dc2626'; msg.textContent=t; return; }
+    msg.style.color='#16a34a'; msg.textContent='Saved. The gateway is restarting - reload this page in about 15 seconds.';
+  } catch(err){ msg.style.color='#dc2626'; msg.textContent='Save failed'; }
+};
+
+// Register map of the NX1P2 mini station (PLC arrays Modbus_Coils 0-19 and Modbus_Registers 0-1)
+async function loadStationPreset(){
+  if(registers.length && !confirm('Replace the current '+registers.length+' registers with the NX1P2 station preset (22 registers)?')) return;
+  const coils=['ES0','MODE_AUTO_MAN','MODE_DG_OEE','PB_RED','PB_GREEN','PB_YELLOW','B1','B2','B3','B4',
+               'LED_RED','LED_YELLOW','LED_GREEN','K2','R2','K3','TL_1_R','TL_2_Y','TL_3_G','K1_R1'];
+  // text for raw 1 / raw 0 (ES0 is NC: 1 = safe; the red button rests at 1)
+  const TXT={ES0:['OK','PRESSED'],MODE_AUTO_MAN:['AUTO','MANUAL'],MODE_DG_OEE:['OEE','DG'],PB_RED:['RELEASED','PRESSED'],
+             PB_GREEN:['PRESSED','RELEASED'],PB_YELLOW:['PRESSED','RELEASED'],B1:['DETECT','CLEAR'],B2:['DETECT','CLEAR'],
+             B3:['DETECT','CLEAR'],B4:['METAL','CLEAR']};
+  const list=coils.map((n,i)=>({name:n,fc:1,addr:i,dt:0,scale:1,mqttTopic:'station/nx1p2/'+n.toLowerCase(),wr:false,en:true,
+                                on:(TXT[n]||['ON','OFF'])[0],off:(TXT[n]||['ON','OFF'])[1]}));
+  list.push({name:'AnalogIn1',fc:3,addr:0,dt:1,scale:1,mqttTopic:'station/nx1p2/analog_in1',wr:false,en:true});
+  list.push({name:'AnalogIn2',fc:3,addr:1,dt:1,scale:1,mqttTopic:'station/nx1p2/analog_in2',wr:false,en:true});
+  try {
+    const r=await fetch('/saveRS485Regs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(list)});
+    if(!r.ok) throw new Error(await r.text());
+    await loadRegisters();
+  } catch(e){ alert('Loading the preset failed: '+e.message); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+let _pollingMqtt=false, _pollingRegs=false;
+async function pollMqttStatusGuarded(){if(_pollingMqtt)return;_pollingMqtt=true;try{await pollMqttStatus();}finally{_pollingMqtt=false;}}
+async function pollRegistersGuarded(){if(_pollingRegs)return;_pollingRegs=true;try{await pollRegisters();}finally{_pollingRegs=false;}}
+
+loadRegisters(); loadModbusTCP(true);
+setInterval(()=>{if(document.visibilityState!=='hidden')loadModbusTCP(false);}, 2000);
+setInterval(()=>{if(document.visibilityState!=='hidden')pollRegistersGuarded();},  1000);
+</script>
+</body>
+</html>

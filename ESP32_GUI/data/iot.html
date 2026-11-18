@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IoT Configuration</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .topic-row { display:flex; align-items:center; gap:6px; margin-bottom:7px; font-size:13px; }
+    .topic-row label { min-width:36px; text-align:right; color:#555; font-weight:600; flex-shrink:0; }
+    .topic-row .topic-input { flex:1; min-width:120px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:13px; font-family:'Courier New',monospace; }
+    .topic-row .pub-input  { width:70px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; font-family:'Courier New',monospace; flex-shrink:0; }
+    .topic-row .pub-label  { font-size:10px; color:#aaa; flex-shrink:0; white-space:nowrap; }
+    .topic-row .topic-input:focus,
+    .topic-row .pub-input:focus  { outline:none; border-color:#2563eb; }
+    .topic-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#999; }
+    .topic-header span:first-child { min-width:36px; }
+    .topic-header .th-topic  { flex:1; }
+    .topic-header .th-pubms  { width:70px; text-align:center; flex-shrink:0; }
+    /* ── Modbus transport switch (RS485 / TCP) ── */
+    .mb-transport { display:flex; border:1px solid #d1d5db; border-radius:8px; overflow:hidden; margin-bottom:14px; }
+    .mb-transport button { flex:1; padding:9px 10px; border:0; background:#f9fafb; color:#4b5563; font-size:13px; font-weight:600; cursor:pointer; }
+    .mb-transport button + button { border-left:1px solid #d1d5db; }
+    .mb-transport button.active { background:#2563eb; color:#fff; }
+    .mb-transport button small { display:block; font-weight:400; font-size:11px; opacity:.8; }
+    .mb-transport button .live { display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-left:6px; vertical-align:middle; visibility:hidden; }
+    .mb-transport button.on .live { visibility:visible; }
+    .mb-info { font-size:12px; color:#888; margin-bottom:10px; line-height:1.6; }
+    .mb-test-result { margin-top:10px; font-size:12px; border-radius:6px; padding:8px 10px; display:none; }
+    .mb-test-result.ok  { display:block; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+    .mb-test-result.err { display:block; background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+    .mb-test-result.wait{ display:block; background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb; }
+    .btn-preset { padding:5px 10px; border:1px solid #2563eb; color:#2563eb; background:#fff; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-preset:hover { background:#eff6ff; }
+    .reg-flag { transform:scale(.8); transform-origin:left center; }
+    .flag-off { color:#9ca3af; text-decoration:line-through; }
+  </style>
+</head>
+<body>
+
+<nav class="topnav">
+  <img src="/shrdc_logo.png" alt="SHRDC">
+  <div class="topnav-links">
+    <a href="/"         class="nav-link">Dashboard</a>
+    <a href="/kpi"      class="nav-link">KPI</a>
+    <a href="/signals"  class="nav-link">Signal Status</a>
+    <a href="/iot"      class="nav-link active">IoT Config</a>
+    <a href="/modbus"   class="nav-link">Modbus TCP</a>
+    <a href="/tagoio"   class="nav-link">TagoIO</a>
+    <a href="/sdcard"   class="nav-link">SD Card</a>
+    <a href="/telegram" class="nav-link">Telegram</a>
+  </div>
+  <img src="/msf_logo.png" alt="MSF">
+  <div class="topnav-right">
+    <a href="/logout" class="btn-logout">Logout</a>
+  </div>
+</nav>
+
+<div class="container-wide">
+  <h1 style="margin-bottom:20px;">IoT Configuration</h1>
+
+  <div class="iot-cols">
+
+    <!-- ══════════════════ LEFT: MQTT ══════════════════ -->
+    <div class="iot-col">
+      <div class="iot-col-title">MQTT Broker</div>
+
+      <!-- Status banner -->
+      <div class="mqtt-broker-section" style="margin-bottom:14px;">
+        <div class="mqtt-status-row">
+          <span class="mqtt-status-label">Active Broker:</span>
+          <span class="mqtt-status-ip" id="activeHost">--</span>
+          <span id="activeSummary" style="font-weight:normal;color:#888;font-size:12px;font-family:monospace;"></span>
+          <span class="mqtt-conn-badge" id="mqttConnBadge">&#9679; Checking&hellip;</span>
+        </div>
+      </div>
+
+      <form id="mqttForm">
+        <div class="mqtt-broker-section">
+          <h3>Broker Connection</h3>
+
+          <div style="margin-bottom:10px;">
+            <div style="font-size:12px;color:#555;font-weight:600;margin-bottom:7px;">Connection Mode</div>
+            <div class="mqtt-mode-group">
+              <button type="button" class="mqtt-mode-btn" id="btnLocal" onclick="setMode('local')">
+                Local Broker<br><small style="font-weight:400;font-size:11px;">Direct TCP / TLS</small>
+              </button>
+              <button type="button" class="mqtt-mode-btn" id="btnCloud" onclick="setMode('cloud')">
+                Cloud Broker<br><small style="font-weight:400;font-size:11px;">WebSocket / WSS</small>
+              </button>
+            </div>
+          </div>
+
+          <!-- Local settings -->
+          <div id="localBlock" class="mqtt-conn-block" style="display:none;">
+            <h4>Local Broker</h4>
+            <div class="mqtt-field-row">
+              <label>Protocol</label>
+              <select id="localProto" onchange="updateProtoNote()">
+                <option value="tcp">TCP (plain, port 1883)</option>
+                <option value="ssl">TLS/SSL (port 8883)</option>
+              </select>
+            </div>
+            <div class="mqtt-field-row">
+              <label>Broker IP</label>
+              <input type="text" id="localHost" placeholder="e.g. 192.168.1.100" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="mqtt-field-row">
+              <label>Port</label>
+              <input type="number" id="localPort" placeholder="1883" min="1" max="65535" style="max-width:90px;">
+            </div>
+            <div class="mqtt-proto-note" id="localProtoNote">Plain TCP — no encryption.</div>
+          </div>
+
+          <!-- Cloud settings -->
+          <div id="cloudBlock" class="mqtt-conn-block" style="display:none;">
+            <h4>Cloud Broker</h4>
+            <div class="mqtt-field-row">
+              <label>Protocol</label>
+              <select id="cloudProto" onchange="updateProtoNote()">
+                <option value="wss">WSS (WebSocket over TLS)</option>
+                <option value="ws">WS (WebSocket plain)</option>
+              </select>
+            </div>
+            <div class="mqtt-field-row">
+              <label>Host</label>
+              <input type="text" id="cloudHost" placeholder="e.g. broker.hivemq.com" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="mqtt-field-row">
+              <label>Port</label>
+              <input type="number" id="cloudPort" placeholder="443" min="1" max="65535" style="max-width:90px;">
+            </div>
+            <div class="mqtt-field-row">
+              <label>WS Path</label>
+              <input type="text" id="cloudPath" placeholder="/mqtt" spellcheck="false">
+            </div>
+            <div class="mqtt-proto-note" id="cloudProtoNote">WSS — encrypted WebSocket.</div>
+          </div>
+
+          <p class="mqtt-hint">Changes apply on Save. ESP32 will reconnect to new broker.</p>
+        </div>
+
+        <!-- DI / DO Topics with per-topic publish rate -->
+        <div class="mqtt-broker-section">
+          <h3>DI / DO MQTT Topics</h3>
+          <div class="io-wrapper" style="margin-top:0;width:100%;min-width:0;">
+            <div class="io-box">
+              <h2>DI MQTT Topics</h2>
+              <div class="topic-header">
+                <span>&nbsp;</span>
+                <span class="th-topic">Topic</span>
+                <span class="th-pubms">Pub ms</span>
+              </div>
+              <div id="diInputs"></div>
+              <p class="mqtt-hint" style="margin-top:4px;">Pub ms: 0 = on change only &nbsp;|&nbsp; &gt;0 = periodic heartbeat interval</p>
+            </div>
+            <div class="io-box">
+              <h2>DO MQTT Topics</h2>
+              <div class="topic-header">
+                <span>&nbsp;</span>
+                <span class="th-topic">Topic</span>
+                <span class="th-pubms">Pub ms</span>
+              </div>
+              <div id="doInputs"></div>
+              <p class="mqtt-hint" style="margin-top:4px;">Pub ms: 0 = on state change only</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <button type="submit" class="btn-save-formula">Save MQTT Config</button>
+        </div>
+      </form>
+
+    </div><!-- /.iot-col MQTT -->
+
+    <div class="iot-col-divider"></div>
+
+    <!-- ══════════════════ RIGHT: RS485 ══════════════════ -->
+    <div class="iot-col">
+      <div class="iot-col-title">RS485 / Modbus</div>
+      <div class="mb-info" id="tcpNote" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;color:#1e40af;">
+        PLC over Ethernet? Use the <a href="/modbus"><b>Modbus TCP</b></a> page. The <b>register list</b> (what is read, MQTT/TagoIO switches) is on the <a href="/modbus"><b>Modbus TCP</b></a> page and is used by RS485 too &mdash; turning RS485 on turns Modbus TCP off.
+      </div>
+
+      <!-- Serial port settings -->
+      <div class="rs485-section" id="paneRtu">
+        <div class="rs485-section-title">
+          Serial Port Settings
+          <div class="title-actions">
+            <label class="sd-toggle" style="margin-left:6px;" title="Enable Modbus Polling">
+              <input type="checkbox" id="rs485EnableToggle" onchange="toggleRS485Enable()">
+              <span class="sd-slider"></span>
+            </label>
+            <span id="rs485EnableLabel" style="font-size:11px;color:#555;margin-right:8px;">Polling Off</span>
+            <span id="deviceStatusBadge" class="device-status-badge unknown">
+              <span class="device-status-dot"></span> Unknown
+            </span>
+          </div>
+        </div>
+
+        <div style="font-size:12px;color:#888;margin-bottom:10px;">
+          Active:&nbsp;
+          <b><span id="baudVal">?</span></b> baud &nbsp;|&nbsp;
+          Format: <b><span id="formatVal">?</span></b> &nbsp;|&nbsp;
+          Slave: <b><span id="addrVal">?</span></b>
+        </div>
+
+        <form id="rsForm">
+          <div class="rs-field-row">
+            <label>Baud Rate</label>
+            <select name="baud" id="selBaud">
+              <option value="1200">1200</option>
+              <option value="2400">2400</option>
+              <option value="4800">4800</option>
+              <option value="9600" selected>9600</option>
+              <option value="19200">19200</option>
+              <option value="38400">38400</option>
+              <option value="57600">57600</option>
+              <option value="115200">115200</option>
+            </select>
+          </div>
+          <div class="rs-field-row">
+            <label>Parity</label>
+            <select name="parity" id="selParity">
+              <option value="None">None</option>
+              <option value="Even">Even</option>
+              <option value="Odd">Odd</option>
+            </select>
+          </div>
+          <div class="rs-field-row">
+            <label>Stop Bits</label>
+            <select name="stopBits" id="selStopBits">
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </div>
+          <div class="rs-field-row">
+            <label>Data Bits</label>
+            <select name="dataBits" id="selDataBits">
+              <option value="7">7</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+          <div class="rs-field-row">
+            <label>Slave Address</label>
+            <input name="addr" id="inpAddr" placeholder="e.g. 1" style="max-width:70px;">
+            <span style="font-size:11px;color:#aaa;">Modbus slave ID (1-247)</span>
+          </div>
+          <div class="rs-field-row">
+            <label>Poll Interval</label>
+            <input type="number" name="pollInterval" id="inpPollInterval"
+                   min="100" max="60000" value="500" style="max-width:90px;">
+            <span style="font-size:11px;color:#aaa;">ms per register cycle &mdash; lower = faster data, higher bus load</span>
+          </div>
+          <div class="rs-field-row">
+            <label>Publish Interval</label>
+            <input type="number" name="publishInterval" id="inpPublishInterval"
+                   min="100" max="60000" value="1000" style="max-width:90px;">
+            <span style="font-size:11px;color:#aaa;">ms between MQTT publishes per register (independent of poll rate)</span>
+          </div>
+
+          <div style="margin-top:8px;font-size:11px;color:#888;background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:7px 10px;">
+            <b>Note:</b> Device-connected status is checked internally every 2 s regardless of poll interval.
+            Set a high poll interval (e.g. 10000 ms) to reduce bus traffic while still detecting connectivity.
+          </div>
+
+          <div style="margin-top:10px;">
+            <button type="submit" class="btn-save-formula">Save Port Settings</button>
+            <span id="rsSaveMsg" style="font-size:12px;font-weight:700;margin-left:10px;"></span>
+          </div>
+        </form>
+      </div>
+
+
+      <div class="mb-info" style="margin-top:10px;"><span id="regSummary">Registers: ?</span> &mdash; <a href="/modbus#regTableWrap"><b>Edit registers</b></a></div>
+    </div><!-- /.iot-col RS485 -->
+
+  </div><!-- /.iot-cols -->
+
+  <div class="site-footer">&copy; SHRDC. All rights reserved.</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// MQTT CONFIG
+// ══════════════════════════════════════════
+let currentMode = 'cloud';
+let mqttFormLoaded = false;
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('localBlock').style.display = mode==='local' ? '' : 'none';
+  document.getElementById('cloudBlock').style.display = mode==='cloud' ? '' : 'none';
+  document.getElementById('btnLocal').classList.toggle('active', mode==='local');
+  document.getElementById('btnCloud').classList.toggle('active', mode==='cloud');
+  updateProtoNote();
+}
+
+function updateProtoNote() {
+  const lp=document.getElementById('localProto').value;
+  const cp=document.getElementById('cloudProto').value;
+  document.getElementById('localProtoNote').textContent = lp==='ssl'?'TLS/SSL — encrypted.':'Plain TCP — no encryption.';
+  document.getElementById('cloudProtoNote').textContent = cp==='wss'?'WSS — encrypted WebSocket. Recommended for cloud.':'WS — plain WebSocket.';
+  if (currentMode==='local') { const el=document.getElementById('localPort'); if(!el.dataset.userEdited) el.value=lp==='ssl'?'8883':'1883'; }
+  else { const el=document.getElementById('cloudPort'); if(!el.dataset.userEdited) el.value=cp==='wss'?'443':'80'; }
+}
+
+['localPort','cloudPort'].forEach(id=>document.getElementById(id).addEventListener('input',function(){this.dataset.userEdited='1';}));
+
+function updateMqttStatusBadge(d) {
+  const badge=document.getElementById('mqttConnBadge');
+  badge.textContent = d.mqttConnected ? '\u25cf Connected' : '\u25cf Disconnected';
+  badge.className = 'mqtt-conn-badge '+(d.mqttConnected?'connected':'disconnected');
+  document.getElementById('activeHost').textContent = d.mqttHost||'--';
+  document.getElementById('activeSummary').textContent = d.mqttMode
+    ? '('+d.mqttMode+' / '+(d.mqttProto||'').toUpperCase()+' :'+d.mqttPort+')':'';
+}
+
+async function loadMqttConfig() {
+  try {
+    const d = await (await fetch('/getConfig')).json();
+    if (!mqttFormLoaded) {
+      mqttFormLoaded = true;
+      const mode = d.mqttMode || 'cloud';
+      setMode(mode);
+      if (mode==='local') {
+        document.getElementById('localProto').value = d.mqttProto||'tcp';
+        document.getElementById('localHost').value  = d.mqttHost||'';
+        document.getElementById('localPort').value  = d.mqttPort||1883;
+      } else {
+        document.getElementById('cloudProto').value = d.mqttProto||'wss';
+        document.getElementById('cloudHost').value  = d.mqttHost||'';
+        document.getElementById('cloudPort').value  = d.mqttPort||443;
+        document.getElementById('cloudPath').value  = d.mqttPath||'/mqtt';
+      }
+      updateProtoNote();
+      // Build topic rows with per-topic publish rate
+      const diC=document.getElementById('diInputs'), doC=document.getElementById('doInputs');
+      diC.innerHTML=''; doC.innerHTML='';
+      for (let i=0; i<8; i++) {
+        const diTopic = (d.inputs && d.inputs[i]) || '';
+        const doTopic = (d.outputs && d.outputs[i]) || '';
+        const diPubMs = (d.inputPubMs && d.inputPubMs[i] != null) ? d.inputPubMs[i] : 0;
+        const doPubMs = (d.outputPubMs && d.outputPubMs[i] != null) ? d.outputPubMs[i] : 0;
+        diC.innerHTML += '<div class="topic-row">'+
+          '<label>DI'+(i+1)+'</label>'+
+          '<input class="topic-input" name="in'+i+'" value="'+escHtml(diTopic)+'">'+
+          '<input class="pub-input" name="inPubMs'+i+'" type="number" min="0" max="60000" value="'+diPubMs+'" title="Publish interval ms (0=on change)">'+
+          '<span class="pub-label">ms</span>'+
+          '</div>';
+        doC.innerHTML += '<div class="topic-row">'+
+          '<label>DO'+(i+1)+'</label>'+
+          '<input class="topic-input" name="out'+i+'" value="'+escHtml(doTopic)+'">'+
+          '<input class="pub-input" name="outPubMs'+i+'" type="number" min="0" max="60000" value="'+doPubMs+'" title="Publish interval ms (0=on change)">'+
+          '<span class="pub-label">ms</span>'+
+          '</div>';
+      }
+    }
+    updateMqttStatusBadge(d);
+  } catch(e) { console.error(e); }
+}
+
+async function pollMqttStatus() {
+  try { const d=await(await fetch('/getConfig')).json(); updateMqttStatusBadge(d); } catch(e){}
+}
+
+document.getElementById('mqttForm').onsubmit = async function(e) {
+  e.preventDefault();
+  const params = new URLSearchParams();
+  params.set('mqttMode', currentMode);
+  if (currentMode==='local') {
+    params.set('mqttProto', document.getElementById('localProto').value);
+    params.set('mqttHost',  document.getElementById('localHost').value);
+    params.set('mqttPort',  document.getElementById('localPort').value);
+    params.set('mqttPath',  '');
+  } else {
+    params.set('mqttProto', document.getElementById('cloudProto').value);
+    params.set('mqttHost',  document.getElementById('cloudHost').value);
+    params.set('mqttPort',  document.getElementById('cloudPort').value);
+    params.set('mqttPath',  document.getElementById('cloudPath').value);
+  }
+  // Collect DI topic rows
+  document.querySelectorAll('#diInputs .topic-row').forEach((row, i) => {
+    params.set('in' + i,       row.querySelector('.topic-input').value);
+    params.set('inPubMs' + i,  row.querySelector('.pub-input').value);
+  });
+  // Collect DO topic rows
+  document.querySelectorAll('#doInputs .topic-row').forEach((row, i) => {
+    params.set('out' + i,       row.querySelector('.topic-input').value);
+    params.set('outPubMs' + i,  row.querySelector('.pub-input').value);
+  });
+  const r = await fetch('/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+  if (r.ok) { alert('MQTT config saved. ESP32 will reconnect if broker changed.'); setTimeout(pollMqttStatusGuarded, 1500); }
+  else alert('Save failed: ' + await r.text());
+};
+
+// ── shared helpers ────────────────────────────────────────────────
+let tcpEnabled = false, rtuEnabled = false;
+function setBadge(id, cls, text){
+  const b=document.getElementById(id); if(!b) return;
+  b.className='device-status-badge '+cls; b.innerHTML='<span class="device-status-dot"></span> '+text;
+}
+function markTransportLive(){}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function loadRS485() {
+  try {
+    const d = await (await fetch('/getRS485')).json();
+    document.getElementById('selBaud').value          = String(d.baud);
+    document.getElementById('selParity').value        = d.parity;
+    document.getElementById('selStopBits').value      = String(d.stopBits);
+    document.getElementById('selDataBits').value      = String(d.dataBits);
+    document.getElementById('inpAddr').value          = d.addr||'1';
+    document.getElementById('inpPollInterval').value  = d.pollIntervalMs||500;
+    document.getElementById('inpPublishInterval').value = d.publishInterval||1000;
+    document.getElementById('baudVal').textContent    = d.baud;
+    document.getElementById('formatVal').textContent  = d.dataBits+(d.parity||'N').charAt(0)+d.stopBits;
+    document.getElementById('addrVal').textContent    = d.addr;
+    document.getElementById('rs485EnableToggle').checked = !!d.enabled;
+    rtuEnabled = !!d.enabled; markTransportLive();
+    document.getElementById('rs485EnableLabel').textContent = d.enabled ? 'Polling On' : 'Polling Off';
+    updateDeviceStatus(d);
+  } catch(e) { console.error('loadRS485:',e); }
+}
+
+async function toggleRS485Enable(){
+  const cb = document.getElementById('rs485EnableToggle');
+  const label = document.getElementById('rs485EnableLabel');
+  cb.disabled = true;
+  try {
+    const r = await fetch('/toggleRS485',{method:'POST'});
+    const state = (await r.text()).trim();
+    cb.checked = (state==='1');
+    label.textContent = cb.checked ? 'Polling On' : 'Polling Off';
+    rtuEnabled = cb.checked; if(cb.checked) tcpEnabled=false; loadTcpFlag();
+  } catch(e) {
+    console.error('toggleRS485Enable:',e);
+    cb.checked = !cb.checked; // revert UI on failure
+  } finally {
+    cb.disabled = false;
+  }
+}
+
+function updateDeviceStatus(d) {
+  const badge = document.getElementById('deviceStatusBadge');
+  if (!d.enabled) { badge.className='device-status-badge unknown'; badge.innerHTML='<span class="device-status-dot"></span> Polling Off'; }
+  else if (d.regCount===0) { badge.className='device-status-badge unknown'; badge.innerHTML='<span class="device-status-dot"></span> No Registers'; }
+  else if (d.deviceConnected) { badge.className='device-status-badge connected'; badge.innerHTML='<span class="device-status-dot"></span> Device Connected'; }
+  else { badge.className='device-status-badge disconnected'; badge.innerHTML='<span class="device-status-dot"></span> Not Connected'; }
+}
+
+document.getElementById('rsForm').onsubmit = async function(e) {
+  e.preventDefault();
+  const msg=document.getElementById('rsSaveMsg');
+  msg.style.color='#555'; msg.textContent='Saving...';
+  try {
+    await fetch('/saveRS',{method:'POST',body:new FormData(this)});
+    msg.style.color='#16a34a'; msg.textContent='Saved — RS485 re-initialized';
+    setTimeout(()=>{msg.textContent='';loadRS485();},2000);
+  } catch(err){msg.style.color='#dc2626';msg.textContent='Save failed';}
+};
+
+// ── RS485 status + Modbus TCP state (no register table on this page) ──
+async function pollRs485Status(){
+  try{ const d=await (await fetch('/getRS485')).json(); rtuEnabled=!!d.enabled; updateDeviceStatus(d);
+       document.getElementById('regSummary').textContent='Registers: '+(d.regCount??'?')+' configured'; }catch(e){}
+}
+async function loadTcpFlag(){
+  try{
+    const d=await (await fetch('/getModbusTCP')).json(); tcpEnabled=!!d.enabled;
+    document.getElementById('tcpNote').innerHTML = tcpEnabled
+      ? '<b>Modbus TCP is ON</b> (PLC '+escHtml(d.ip)+') &mdash; the registers are being read over Ethernet. Settings and register list: <a href="/modbus"><b>Modbus TCP</b></a> page. Turning RS485 polling on will turn Modbus TCP off.'
+      : 'PLC over Ethernet? Use the <a href="/modbus"><b>Modbus TCP</b></a> page. The <b>register list</b> (what is read, MQTT/TagoIO switches) is on the <a href="/modbus"><b>Modbus TCP</b></a> page and is used by RS485 too &mdash; turning RS485 on turns Modbus TCP off.';
+  }catch(e){}
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+let _pollingMqtt=false;
+async function pollMqttStatusGuarded(){if(_pollingMqtt)return;_pollingMqtt=true;try{await pollMqttStatus();}finally{_pollingMqtt=false;}}
+loadMqttConfig(); loadRS485(); loadTcpFlag(); pollRs485Status();
+setInterval(()=>{if(document.visibilityState!=='hidden')loadTcpFlag();}, 5000);
+setInterval(()=>{if(document.visibilityState!=='hidden')pollRs485Status();}, 2000);
+setInterval(()=>{if(document.visibilityState!=='hidden')pollMqttStatusGuarded();}, 5000);
+</script>
+</body>
+</html>

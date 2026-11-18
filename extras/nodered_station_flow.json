@@ -1,0 +1,626 @@
+[
+  {
+    "id": "tab_station",
+    "type": "tab",
+    "label": "NX1P2 Station",
+    "disabled": false,
+    "info": "PLC (Modbus TCP) -> Waveshare web server (ESP32_GUI) -> MQTT -> this flow -> Dashboard 2.0 + TagoIO.\n\nTagoIO token: double-click this tab -> Environment Variables -> TAGO_DEVICE_TOKEN.",
+    "env": [
+      {
+        "name": "TAGO_DEVICE_TOKEN",
+        "value": "PASTE_YOUR_TAGOIO_DEVICE_TOKEN",
+        "type": "str"
+      }
+    ]
+  },
+  {
+    "id": "broker_local",
+    "type": "mqtt-broker",
+    "name": "Local Mosquitto",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "nodered-station",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "closeTopic": "",
+    "willTopic": "",
+    "userProps": "",
+    "sessionExpiry": ""
+  },
+  {
+    "id": "ui_base",
+    "type": "ui-base",
+    "name": "Station",
+    "path": "/dashboard",
+    "appIcon": "",
+    "includeClientData": true,
+    "acceptsClientConfig": [
+      "ui-notification",
+      "ui-control"
+    ],
+    "showPathInSidebar": false,
+    "headerContent": "page",
+    "navigationStyle": "default",
+    "titleBarStyle": "default",
+    "showReconnectNotification": true,
+    "notificationDisplayTime": 1,
+    "showDisconnectNotification": true
+  },
+  {
+    "id": "ui_theme",
+    "type": "ui-theme",
+    "name": "Station theme",
+    "colors": {
+      "surface": "#1f3a5f",
+      "primary": "#1565c0",
+      "bgPage": "#eef1f5",
+      "groupBg": "#ffffff",
+      "groupOutline": "#d0d7e2"
+    },
+    "sizes": {
+      "density": "default",
+      "pagePadding": "12px",
+      "groupGap": "12px",
+      "groupBorderRadius": "6px",
+      "widgetGap": "12px"
+    }
+  },
+  {
+    "id": "ui_page_main",
+    "type": "ui-page",
+    "name": "Main",
+    "ui": "ui_base",
+    "path": "/main",
+    "icon": "view-dashboard",
+    "layout": "grid",
+    "theme": "ui_theme",
+    "breakpoints": [
+      {
+        "name": "Default",
+        "px": "0",
+        "cols": "3"
+      },
+      {
+        "name": "Tablet",
+        "px": "576",
+        "cols": "6"
+      },
+      {
+        "name": "Small Desktop",
+        "px": "768",
+        "cols": "9"
+      },
+      {
+        "name": "Desktop",
+        "px": "1024",
+        "cols": "12"
+      }
+    ],
+    "order": 1,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "ui_page_settings",
+    "type": "ui-page",
+    "name": "Settings",
+    "ui": "ui_base",
+    "path": "/settings",
+    "icon": "cog",
+    "layout": "grid",
+    "theme": "ui_theme",
+    "breakpoints": [
+      {
+        "name": "Default",
+        "px": "0",
+        "cols": "3"
+      },
+      {
+        "name": "Tablet",
+        "px": "576",
+        "cols": "6"
+      },
+      {
+        "name": "Small Desktop",
+        "px": "768",
+        "cols": "9"
+      },
+      {
+        "name": "Desktop",
+        "px": "1024",
+        "cols": "12"
+      }
+    ],
+    "order": 2,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "ui_group_live",
+    "type": "ui-group",
+    "name": "Live station data",
+    "page": "ui_page_main",
+    "width": "12",
+    "height": "1",
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false",
+    "groupType": "default"
+  },
+  {
+    "id": "ui_group_trend",
+    "type": "ui-group",
+    "name": "Analog inputs (last hour)",
+    "page": "ui_page_main",
+    "width": "12",
+    "height": "1",
+    "order": 2,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false",
+    "groupType": "default"
+  },
+  {
+    "id": "ui_group_select",
+    "type": "ui-group",
+    "name": "Choose what the Main page shows",
+    "page": "ui_page_settings",
+    "width": "12",
+    "height": "1",
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false",
+    "groupType": "default"
+  },
+  {
+    "id": "c1",
+    "type": "comment",
+    "z": "tab_station",
+    "name": "1. Tag list (edit 'Define tags' to add/rename values)",
+    "info": "",
+    "x": 220,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "inj_start",
+    "type": "inject",
+    "z": "tab_station",
+    "name": "on start",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.5,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 80,
+    "wires": [
+      [
+        "fn_tags"
+      ]
+    ]
+  },
+  {
+    "id": "fn_tags",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Define tags",
+    "func": "// ONE place to describe every value coming from the PLC.\n// key: 'coils/<NAME>' for the coils (names as in modbus2mqtt/config.yaml),\n//      'analog/in1' / 'analog/in2' for the holding registers.\n// invert: true for NC contacts (PLC bit is 1 when NOT pressed).\n// Analog: shown value = raw * scale + offset  -> set scale/offset/unit once you know the signal.\nconst B = (key, label, group, onText = 'ON', offText = 'OFF', alarmWhenOn = false, invert = false) =>\n    ({ key, label, group, type: 'bool', onText, offText, alarmWhenOn, invert });\nconst N = (key, label, group, unit = '', scale = 1, offset = 0, decimals = 0) =>\n    ({ key, label, group, type: 'num', unit, scale, offset, decimals });\n\nconst tags = [\n    B('coils/B1', 'Sensor B1', 'Sensors', 'DETECT', 'clear'),\n    B('coils/B2', 'Sensor B2', 'Sensors', 'DETECT', 'clear'),\n    B('coils/B3', 'Sensor B3', 'Sensors', 'DETECT', 'clear'),\n    B('coils/B4', 'Sensor B4 (metal)', 'Sensors', 'METAL', 'clear'),\n\n    N('analog/in1', 'Analog input 1', 'Analog'),          // e.g. N('analog/in1','RTD 1','Analog','°C',0.1,0,1)\n    N('analog/in2', 'Analog input 2', 'Analog'),\n\n    B('coils/ES0', 'E-stop', 'Operator panel', 'PRESSED', 'ok', true, true),       // NC: 1 = safe\n    B('coils/MODE_AUTO_MAN', 'Auto / Manual', 'Operator panel', 'AUTO', 'MANUAL'), // verify which state is AUTO\n    B('coils/MODE_DG_OEE', 'DG / OEE', 'Operator panel', 'OEE', 'DG'),             // verify which state is OEE\n    B('coils/PB_GREEN', 'Green button', 'Operator panel', 'pressed', '-'),\n    B('coils/PB_YELLOW', 'Yellow button', 'Operator panel', 'pressed', '-'),\n    B('coils/PB_RED', 'Red button', 'Operator panel', 'pressed', '-', false, true), // rests TRUE\n    B('coils/LED_GREEN', 'Panel LED green', 'Operator panel'),\n    B('coils/LED_YELLOW', 'Panel LED yellow', 'Operator panel'),\n    B('coils/LED_RED', 'Panel LED red', 'Operator panel', 'ON', 'OFF', true),\n\n    B('coils/TL_3_G', 'Tower light green', 'Tower light'),\n    B('coils/TL_2_Y', 'Tower light yellow', 'Tower light'),\n    B('coils/TL_1_R', 'Tower light red', 'Tower light', 'ON', 'OFF', true),\n\n    B('coils/K1_R1', 'Relay K1 + R1', 'Relays'),\n    B('coils/K2', 'Relay K2', 'Relays'),\n    B('coils/R2', 'Relay R2', 'Relays'),\n    B('coils/K3', 'Relay K3', 'Relays'),\n];\n// TagoIO variable name: lowercase letters, digits, underscore  (coils/B1 -> b1, analog/in1 -> analog_in1)\nfor (const t of tags) t.tago = t.key.replace(/^coils\\//, '').replace(/[^a-z0-9]/gi, '_').toLowerCase();\nflow.set('tags', tags);\n\n// Show everything on first run, and add any newly defined tag to an existing selection\nconst sel = global.get('selected');\nif (!Array.isArray(sel)) {\n    global.set('selected', tags.map(t => t.key));\n} else {\n    const prev = global.get('allKeys') || [];\n    const added = tags.map(t => t.key).filter(k => !prev.includes(k) && !sel.includes(k));\n    if (added.length && prev.length) global.set('selected', sel.concat(added));\n}\nglobal.set('allKeys', tags.map(t => t.key));\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 80,
+    "wires": [
+      [
+        "fn_render_settings"
+      ]
+    ]
+  },
+  {
+    "id": "c2",
+    "type": "comment",
+    "z": "tab_station",
+    "name": "2. Values from modbus2mqtt (station/nx1p2/#)",
+    "info": "",
+    "x": 220,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "mqtt_in",
+    "type": "mqtt in",
+    "z": "tab_station",
+    "name": "station/nx1p2/#",
+    "topic": "station/nx1p2/#",
+    "qos": "0",
+    "datatype": "utf8",
+    "broker": "broker_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 160,
+    "y": 180,
+    "wires": [
+      [
+        "fn_store"
+      ]
+    ]
+  },
+  {
+    "id": "fn_store",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Store value",
+    "func": "// Keep the latest value of every data point in flow context.\nconst topic = msg.topic.replace(/^station\\/nx1p2\\//, '');\nconst raw = String(msg.payload).trim();\nconst latest = flow.get('latest') || {};\nconst now = Date.now();\nconst out = [];\n\nif (topic === 'online') {                       // connection state from (patched) modbus2mqtt\n    flow.set('online', raw === 'true');\n    flow.set('onlineAt', now);\n    return null;\n}\n\n// ESP32_GUI web server: one topic per register, e.g. station/nx1p2/es0 = \"1\", station/nx1p2/analog_in1 = \"302\"\nconst perReg = (flow.get('tags') || []).find(x => x.tago === topic.toLowerCase());\nif (perReg) {\n    const num = Number(raw);\n    latest[perReg.key] = { v: isNaN(num) ? raw : num, ts: now };\n    flow.set('regAt', now);                     // the gateway only publishes values it read OK -> PLC online\n    if (perReg.type !== 'bool' && !isNaN(num))\n        out.push({ topic: perReg.label, payload: Number((num * perReg.scale + perReg.offset).toFixed(perReg.decimals)) });\n} else if (topic === 'coils') {                 // {\"ES0\":1,\"B1\":0,...} -> coils/ES0, coils/B1 ...\n    let obj;\n    try { obj = JSON.parse(raw); } catch (e) { node.warn('bad coils JSON: ' + raw); return null; }\n    for (const [name, v] of Object.entries(obj)) latest['coils/' + name] = { v: Number(v), ts: now };\n} else {\n    const num = Number(raw);\n    latest[topic] = { v: (raw !== '' && !isNaN(num)) ? num : raw, ts: now };\n    // scaled value to the trend chart (skipped until 'Define tags' has run, so series names stay consistent)\n    const t = topic.startsWith('analog/') && (flow.get('tags') || []).find(x => x.key === topic);\n    if (t && !isNaN(num)) {\n        out.push({ topic: t.label, payload: Number((num * t.scale + t.offset).toFixed(t.decimals)) });\n    }\n}\nflow.set('latest', latest);\nflow.set('lastDataAt', now);\nreturn out.length ? [out] : null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 180,
+    "wires": [
+      [
+        "ui_chart"
+      ]
+    ]
+  },
+  {
+    "id": "ui_chart",
+    "type": "ui-chart",
+    "z": "tab_station",
+    "group": "ui_group_trend",
+    "name": "Analog trend",
+    "label": "",
+    "order": 1,
+    "chartType": "line",
+    "category": "topic",
+    "categoryType": "msg",
+    "xAxisLabel": "",
+    "xAxisProperty": "",
+    "xAxisPropertyType": "timestamp",
+    "xAxisType": "time",
+    "xAxisFormat": "",
+    "xAxisFormatType": "auto",
+    "xmin": "",
+    "xmax": "",
+    "yAxisLabel": "",
+    "yAxisProperty": "payload",
+    "yAxisPropertyType": "msg",
+    "ymin": "",
+    "ymax": "",
+    "bins": 10,
+    "action": "append",
+    "stackSeries": false,
+    "pointShape": "circle",
+    "pointRadius": 2,
+    "showLegend": true,
+    "removeOlder": 1,
+    "removeOlderUnit": "3600",
+    "removeOlderPoints": "",
+    "colors": [
+      "#1565c0",
+      "#e65100",
+      "#2e7d32",
+      "#6a1b9a",
+      "#c62828",
+      "#00838f",
+      "#5d4037",
+      "#455a64",
+      "#ad1457"
+    ],
+    "textColor": [
+      "#666666"
+    ],
+    "textColorDefault": true,
+    "gridColor": [
+      "#e5e5e5"
+    ],
+    "gridColorDefault": true,
+    "width": "12",
+    "height": "5",
+    "className": "",
+    "interpolation": "linear",
+    "x": 620,
+    "y": 180,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "c3",
+    "type": "comment",
+    "z": "tab_station",
+    "name": "3. Main page - redraws every second",
+    "info": "",
+    "x": 240,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "inj_tick",
+    "type": "inject",
+    "z": "tab_station",
+    "name": "every 1 s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "1",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 280,
+    "wires": [
+      [
+        "fn_render_main"
+      ]
+    ]
+  },
+  {
+    "id": "fn_render_main",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Render main tiles",
+    "func": "// Builds the tile list for the Main page from the selected values.\nconst tags = flow.get('tags') || [];\nconst latest = flow.get('latest') || {};\nconst selected = global.get('selected') || [];\nconst online = flow.get('online') === true || Date.now() - (flow.get('regAt') || 0) < 5000;\nconst hasData = Object.keys(latest).length > 0;\n\nconst tiles = tags.filter(t => selected.includes(t.key)).map(t => {\n    const d = latest[t.key];\n    if (!d) return { key: t.key, label: t.label, text: '—', cls: 'nodata' };\n    if (t.type === 'bool') {\n        const on = (Number(d.v) === 1) !== t.invert;\n        return { key: t.key, label: t.label, text: on ? t.onText : t.offText,\n                 cls: on ? (t.alarmWhenOn ? 'alarm' : 'on') : 'off' };\n    }\n    const v = Number(d.v) * t.scale + t.offset;\n    return { key: t.key, label: t.label, text: v.toFixed(t.decimals) + (t.unit ? ' ' + t.unit : ''), cls: 'num' };\n});\n\nconst lastAt = flow.get('lastDataAt') || 0;\nconst updated = lastAt ? 'last change ' + new Date(lastAt).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kuala_Lumpur' }) : '';\nconst status = online ? 'PLC online' : (hasData ? 'PLC offline - showing last known values' : 'Waiting for data from the gateway…');\n\nconst sig = JSON.stringify([online, status, tiles, updated]);\nif (sig === context.get('lastSig')) return null;   // nothing changed -> don't resend\ncontext.set('lastSig', sig);\n\nnode.status({ fill: online ? 'green' : 'red', shape: 'dot', text: status });\nreturn { payload: { online, status, tiles, updated } };\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 280,
+    "wires": [
+      [
+        "ui_main"
+      ]
+    ]
+  },
+  {
+    "id": "ui_main",
+    "type": "ui-template",
+    "z": "tab_station",
+    "group": "ui_group_live",
+    "page": "",
+    "ui": "",
+    "name": "Main tiles",
+    "order": 1,
+    "width": "0",
+    "height": "0",
+    "head": "",
+    "format": "<template>\n  <div class=\"st-wrap\">\n    <div class=\"st-banner\" :class=\"online ? 'st-ok' : 'st-bad'\">\n      <span>{{ status }}</span>\n      <span class=\"st-time\">{{ updated }}</span>\n    </div>\n    <div v-if=\"!tiles.length\" class=\"st-empty\">Nothing selected. Open the Settings page and tick the values to show.</div>\n    <div class=\"st-grid\">\n      <div v-for=\"t in tiles\" :key=\"t.key\" class=\"st-tile\" :class=\"'st-' + t.cls\">\n        <div class=\"st-label\">{{ t.label }}</div>\n        <div class=\"st-value\">{{ t.text }}</div>\n      </div>\n    </div>\n  </div>\n</template>\n\n<script>\nexport default {\n  computed: {\n    p () { return (this.msg && this.msg.payload) || {} },\n    tiles () { return this.p.tiles || [] },\n    online () { return !!this.p.online },\n    status () { return this.p.status || '' },\n    updated () { return this.p.updated || '' }\n  }\n}\n</script>\n\n<style>\n.st-wrap { width: 100%; }\n.st-banner { display: flex; justify-content: space-between; padding: 10px 14px; border-radius: 6px; font-weight: 600; margin-bottom: 12px; color: #fff; }\n.st-ok { background: #2e7d32; }\n.st-bad { background: #c62828; }\n.st-time { font-weight: 400; opacity: .85; }\n.st-empty { padding: 16px; color: #666; }\n.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }\n.st-tile { border-radius: 6px; padding: 12px; border: 1px solid #ddd; background: #fafafa; }\n.st-label { font-size: 13px; color: #555; }\n.st-value { font-size: 22px; font-weight: 700; margin-top: 4px; }\n.st-on { background: #e8f5e9; border-color: #66bb6a; }\n.st-on .st-value { color: #2e7d32; }\n.st-off .st-value { color: #9e9e9e; }\n.st-alarm { background: #ffebee; border-color: #e53935; }\n.st-alarm .st-value { color: #c62828; }\n.st-num .st-value { color: #1565c0; }\n.st-nodata .st-value { color: #bbb; }\n</style>\n",
+    "storeOutMessages": true,
+    "passthru": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 620,
+    "y": 280,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "c4",
+    "type": "comment",
+    "z": "tab_station",
+    "name": "4. Settings page - choose which values show on Main",
+    "info": "",
+    "x": 230,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "fn_render_settings",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Render settings",
+    "func": "// Sends the list of available values + current selection to the Settings page.\nconst tags = flow.get('tags') || [];\nconst groups = [];\nfor (const t of tags) {\n    let g = groups.find(x => x.name === t.group);\n    if (!g) { g = { name: t.group, items: [] }; groups.push(g); }\n    g.items.push({ key: t.key, label: t.label });\n}\nreturn { payload: { groups, selected: global.get('selected') || [], saved: msg.saved === true } };\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 380,
+    "wires": [
+      [
+        "ui_settings"
+      ]
+    ]
+  },
+  {
+    "id": "ui_settings",
+    "type": "ui-template",
+    "z": "tab_station",
+    "group": "ui_group_select",
+    "page": "",
+    "ui": "",
+    "name": "Value picker",
+    "order": 1,
+    "width": "0",
+    "height": "0",
+    "head": "",
+    "format": "<template>\n  <div class=\"st-wrap\">\n    <p class=\"st-help\">Tick the values that should appear on the <b>Main</b> page, then press <b>Save</b>.</p>\n    <div v-for=\"g in groups\" :key=\"g.name\" class=\"st-group\">\n      <div class=\"st-group-title\">{{ g.name }}</div>\n      <label v-for=\"i in g.items\" :key=\"i.key\" class=\"st-check\">\n        <input type=\"checkbox\" :value=\"i.key\" v-model=\"sel\"> {{ i.label }}\n      </label>\n    </div>\n    <div class=\"st-actions\">\n      <v-btn variant=\"outlined\" @click=\"all\">Select all</v-btn>\n      <v-btn variant=\"outlined\" @click=\"none\">Clear</v-btn>\n      <v-btn color=\"primary\" @click=\"save\">Save</v-btn>\n      <span class=\"st-note\">{{ note }}</span>\n    </div>\n  </div>\n</template>\n\n<script>\nexport default {\n  data () { return { sel: [], note: '' } },\n  computed: {\n    groups () { return (this.msg && this.msg.payload && this.msg.payload.groups) || [] }\n  },\n  watch: {\n    msg: {\n      immediate: true,\n      handler (m) {\n        if (m && m.payload && Array.isArray(m.payload.selected)) {\n          this.sel = m.payload.selected.slice()\n          this.note = m.payload.saved ? 'Saved ✓' : ''\n        }\n      }\n    }\n  },\n  methods: {\n    all () { this.sel = this.groups.flatMap(g => g.items.map(i => i.key)) },\n    none () { this.sel = [] },\n    save () { this.note = 'Saving…'; this.send({ payload: this.sel.slice() }) }\n  }\n}\n</script>\n\n<style>\n.st-help { color: #555; margin-bottom: 8px; }\n.st-group { margin-bottom: 12px; }\n.st-group-title { font-weight: 700; margin-bottom: 4px; }\n.st-check { display: inline-flex; align-items: center; gap: 6px; min-width: 200px; padding: 4px 8px 4px 0; cursor: pointer; }\n.st-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }\n.st-note { color: #2e7d32; font-weight: 600; }\n</style>\n",
+    "storeOutMessages": true,
+    "passthru": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 620,
+    "y": 380,
+    "wires": [
+      [
+        "fn_save"
+      ]
+    ]
+  },
+  {
+    "id": "fn_save",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Save selection",
+    "func": "// Called when the user presses Save on the Settings page.\nconst tags = (flow.get('tags') || []).map(t => t.key);\nconst sel = Array.isArray(msg.payload) ? msg.payload.filter(k => tags.includes(k)) : [];\nglobal.set('selected', sel);          // persisted to disk (contextStorage in settings.js)\nnode.status({ fill: 'blue', shape: 'dot', text: sel.length + ' values selected' });\nreturn { saved: true };\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 850,
+    "y": 380,
+    "wires": [
+      [
+        "fn_render_settings"
+      ]
+    ]
+  },
+  {
+    "id": "c5",
+    "type": "comment",
+    "z": "tab_station",
+    "name": "5. TagoIO - on/off changes within 2 s, analog max every 10 s, everything every 5 min",
+    "info": "Token: double-click the tab -> Environment Variables -> TAGO_DEVICE_TOKEN.",
+    "x": 290,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "inj_tago",
+    "type": "inject",
+    "z": "tab_station",
+    "name": "every 2 s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "2",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 5,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 480,
+    "wires": [
+      [
+        "fn_tago"
+      ]
+    ]
+  },
+  {
+    "id": "fn_tago",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Build TagoIO payload",
+    "func": "// Sends values to TagoIO over HTTP (TagoIO's own MQTT broker is not on the free plan).\n// Only values that changed since the last push are sent, plus everything every 5 min,\n// to stay inside the free plan's data limits.\nconst token = env.get('TAGO_DEVICE_TOKEN');\nif (!token || token.startsWith('PASTE')) { node.status({ fill: 'yellow', shape: 'ring', text: 'set TAGO_DEVICE_TOKEN' }); return null; }\n\nconst online = flow.get('online') === true || Date.now() - (flow.get('regAt') || 0) < 5000;\nconst tags = flow.get('tags') || [];\nconst latest = flow.get('latest') || {};\nconst sent = context.get('sent') || {};\nconst analogDue = Date.now() - (context.get('lastAnalog') || 0) >= 10000;   // analog values change all the time: max every 10 s\nconst fullDue = Date.now() - (context.get('lastFull') || 0) > 5 * 60 * 1000;\n\nconst data = [];\nif (context.get('sentOnline') !== online || fullDue) {\n    data.push({ variable: 'plc_online', value: online });\n    context.set('sentOnline', online);\n}\nif (online) {\n    for (const t of tags) {\n        const d = latest[t.key];\n        if (!d) continue;\n        if (!fullDue && sent[t.key] === d.v) continue;\n        if (!fullDue && t.type !== 'bool' && !analogDue) continue;\n        let value;\n        if (t.type === 'bool') value = ((Number(d.v) === 1) !== t.invert) ? 1 : 0;   // 1 = \"on\" meaning (e.g. e-stop pressed)\n        else value = Number((Number(d.v) * t.scale + t.offset).toFixed(t.decimals));\n        const item = { variable: t.tago, value };\n        if (t.unit) item.unit = t.unit;\n        data.push(item);\n        sent[t.key] = d.v;\n    }\n    if (fullDue) context.set('lastFull', Date.now());\n    if (data.some(x => tags.find(t => t.tago === x.variable && t.type !== 'bool'))) context.set('lastAnalog', Date.now());\n    context.set('sent', sent);\n}\nif (!data.length) { node.status({ fill: 'grey', shape: 'dot', text: online ? 'no changes' : 'PLC offline' }); return null; }\n\nnode.status({ fill: 'blue', shape: 'dot', text: 'sending ' + data.length + ' values' });\nreturn {\n    url: env.get('TAGO_URL') || 'https://api.tago.io/data',\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'Device-Token': token },\n    payload: data\n};\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 480,
+    "wires": [
+      [
+        "http_tago"
+      ]
+    ]
+  },
+  {
+    "id": "http_tago",
+    "type": "http request",
+    "z": "tab_station",
+    "name": "POST TagoIO",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 620,
+    "y": 480,
+    "wires": [
+      [
+        "fn_tago_check"
+      ]
+    ]
+  },
+  {
+    "id": "fn_tago_check",
+    "type": "function",
+    "z": "tab_station",
+    "name": "Check response",
+    "func": "const ok = msg.statusCode >= 200 && msg.statusCode < 300;\nnode.status({ fill: ok ? 'green' : 'red', shape: 'dot',\n              text: (ok ? 'TagoIO OK ' : 'TagoIO error ') + msg.statusCode + ' @ ' + new Date().toLocaleTimeString('en-GB') });\nreturn ok ? null : msg;   // errors go to the debug sidebar\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 850,
+    "y": 480,
+    "wires": [
+      [
+        "dbg_tago"
+      ]
+    ]
+  },
+  {
+    "id": "dbg_tago",
+    "type": "debug",
+    "z": "tab_station",
+    "name": "TagoIO errors",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1080,
+    "y": 480,
+    "wires": []
+  }
+]

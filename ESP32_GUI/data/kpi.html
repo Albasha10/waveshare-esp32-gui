@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KPI</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .topic-row { display:flex; align-items:center; gap:6px; margin-bottom:7px; font-size:13px; }
+    .topic-row label { min-width:36px; text-align:right; color:#555; font-weight:600; flex-shrink:0; }
+    .topic-row .topic-input { flex:1; min-width:120px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:13px; font-family:'Courier New',monospace; }
+    .topic-row .pub-input  { width:70px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; font-family:'Courier New',monospace; flex-shrink:0; }
+    .topic-row .pub-label  { font-size:10px; color:#aaa; flex-shrink:0; white-space:nowrap; }
+    .topic-row .topic-input:focus,
+    .topic-row .pub-input:focus  { outline:none; border-color:#2563eb; }
+    .topic-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#999; }
+    .topic-header span:first-child { min-width:36px; }
+    .topic-header .th-topic  { flex:1; }
+    .topic-header .th-pubms  { width:70px; text-align:center; flex-shrink:0; }
+    /* ── Modbus transport switch (RS485 / TCP) ── */
+    .mb-transport { display:flex; border:1px solid #d1d5db; border-radius:8px; overflow:hidden; margin-bottom:14px; }
+    .mb-transport button { flex:1; padding:9px 10px; border:0; background:#f9fafb; color:#4b5563; font-size:13px; font-weight:600; cursor:pointer; }
+    .mb-transport button + button { border-left:1px solid #d1d5db; }
+    .mb-transport button.active { background:#2563eb; color:#fff; }
+    .mb-transport button small { display:block; font-weight:400; font-size:11px; opacity:.8; }
+    .mb-transport button .live { display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-left:6px; vertical-align:middle; visibility:hidden; }
+    .mb-transport button.on .live { visibility:visible; }
+    .mb-info { font-size:12px; color:#888; margin-bottom:10px; line-height:1.6; }
+    .mb-test-result { margin-top:10px; font-size:12px; border-radius:6px; padding:8px 10px; display:none; }
+    .mb-test-result.ok  { display:block; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+    .mb-test-result.err { display:block; background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+    .mb-test-result.wait{ display:block; background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb; }
+    .btn-preset { padding:5px 10px; border:1px solid #2563eb; color:#2563eb; background:#fff; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-preset:hover { background:#eff6ff; }
+    .reg-flag { transform:scale(.8); transform-origin:left center; }
+    .flag-off { color:#9ca3af; text-decoration:line-through; }
+      .kpi-table select { padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; max-width:220px; }
+    .kpi-table td { vertical-align:middle; }
+    .mb-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+    .mb-badge.connected { background:#dcfce7; color:#15803d; } .mb-badge.disconnected { background:#fee2e2; color:#b91c1c; }
+    .mb-badge.unknown { background:#f3f4f6; color:#6b7280; } .mb-badge.kpi-nodata { background:#fef3c7; color:#92400e; }
+    .eff-input { width:100%; box-sizing:border-box; padding:9px 11px; font-family:'Courier New',monospace; font-size:14px; border:1px solid #cbd5e1; border-radius:6px; }
+    .eff-input:focus { outline:none; border-color:#2563eb; }
+    .eff-chips { margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
+    .eff-chips button { font-family:'Courier New',monospace; font-size:12px; padding:3px 8px; border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:4px; cursor:pointer; }
+    .eff-chips button:hover { background:#e0e7ff; }
+    #effPreset, #effRegPick { padding:5px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; }
+    .eff-prev { margin-top:8px; font-size:13px; font-weight:700; }
+    .eff-prev.ok { color:#15803d; } .eff-prev.warn { color:#b45309; } .eff-prev.err { color:#b91c1c; }
+    .tile-edit-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .tile-edit-table th { text-align:left; font-size:10px; text-transform:uppercase; color:#9ca3af; padding:4px; }
+    .tile-edit-table td { padding:3px 4px; }
+    .tile-edit-table input, .tile-edit-table select { width:100%; padding:5px 7px; border:1px solid #ccc; border-radius:5px; font-size:12px; box-sizing:border-box; }
+    .tile-edit-table td:nth-child(1) { color:#9ca3af; width:20px; } .tile-edit-table td:nth-child(4) { width:80px; }
+    .tile-edit-table td:nth-child(5) { width:110px; color:#1d4ed8; font-family:monospace; font-weight:700; }
+    .tile-edit-table td:nth-child(6) { width:90px; white-space:nowrap; }
+    .tile-edit-table button { font-size:11px; padding:3px 7px; border:1px solid #d1d5db; background:#fff; border-radius:4px; cursor:pointer; }
+  </style>
+</head>
+<body>
+
+<nav class="topnav">
+  <img src="/shrdc_logo.png" alt="SHRDC">
+  <div class="topnav-links">
+    <a href="/"         class="nav-link">Dashboard</a>
+    <a href="/kpi"      class="nav-link active">KPI</a>
+    <a href="/signals"  class="nav-link">Signal Status</a>
+    <a href="/iot"      class="nav-link">IoT Config</a>
+    <a href="/modbus"   class="nav-link">Modbus TCP</a>
+    <a href="/tagoio"   class="nav-link">TagoIO</a>
+    <a href="/sdcard"   class="nav-link">SD Card</a>
+    <a href="/telegram" class="nav-link">Telegram</a>
+  </div>
+  <img src="/msf_logo.png" alt="MSF">
+  <div class="topnav-right">
+    <a href="/logout" class="btn-logout">Logout</a>
+  </div>
+</nav>
+
+<div class="container-wide">
+  <h1 style="margin-bottom:20px;">KPI</h1>
+
+  <div class="iot-cols">
+    <div class="iot-col">
+      <div class="iot-col-title">KPI Signals</div>
+      <div class="mb-info">Pick which signal drives each KPI on the Dashboard: a board input (DI1&ndash;DI8) or an on/off register read from the PLC
+        (<a href="/modbus">Modbus TCP</a> page). <b>Active when</b> says whether the signal counts when it is ON or OFF.</div>
+      <div class="rs485-section">
+        <table class="mon-table kpi-table">
+          <thead><tr><th>KPI</th><th>Signal</th><th>Active when</th><th>Now</th></tr></thead>
+          <tbody id="kpiRows"></tbody>
+        </table>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn-save-formula" onclick="saveKpi()">Save KPI Signals</button>
+          <button class="btn-preset" onclick="presetStation()" title="Running = tower light green, cycle B1 -> B3, reject = B4 (metal)">NX1P2 station preset</button>
+          <button class="btn-clear-formula" onclick="presetDefaults()" title="The original fixed wiring">Board inputs (original)</button>
+          <span id="kpiMsg" style="font-size:12px;font-weight:700;"></span>
+        </div>
+        <div class="mb-info" id="kpiWarn" style="margin-top:10px;color:#b45309;"></div>
+      </div>
+    </div>
+
+    <div class="iot-col-divider"></div>
+
+    <div class="iot-col">
+      <div class="iot-col-title">KPIs now</div>
+      <div class="rs485-section">
+        <table class="mon-table">
+          <tbody>
+            <tr><td>Machine</td><td><span id="kMachine" class="mb-badge unknown">--</span></td></tr>
+            <tr><td>Runtime</td><td><b id="kRun">--</b></td></tr>
+            <tr><td>Downtime</td><td><b id="kDown">--</b></td></tr>
+            <tr><td>Last cycle time</td><td><b id="kCycle">--</b> <span id="kCycleNow" style="font-size:11px;color:#2563eb;"></span></td></tr>
+            <tr><td>Parts (completed cycles)</td><td><b id="kParts">--</b></td></tr>
+            <tr><td>Rejects</td><td><b id="kRej">--</b></td></tr>
+            <tr><td>Good parts</td><td><b id="kGood">--</b></td></tr>
+            <tr><td>Efficiency</td><td><b id="kEff">--</b> <span id="kEffF" style="font-size:11px;color:#9ca3af;"></span></td></tr>
+          </tbody>
+        </table>
+        <div class="mb-info" style="margin-top:10px;">Counters are reset on the <a href="/">Dashboard</a> (Reset All Counters / Reset Runtime). Parts = completed cycles (Cycle start &rarr; Cycle end).
+          Machine RUNNING/STOPPED can also be set over MQTT: topic <code>esp32/machine/state</code> = <code>RUNNING</code> / <code>STOPPED</code>.</div>
+      </div>
+
+      <div class="iot-col-title" style="margin-top:22px;">Efficiency Formula</div>
+      <div class="rs485-section">
+        <div class="mb-info">How <b>Efficiency</b> is worked out. The board calculates it, so the Dashboard, the cards and the SD-card log all use this formula. Result in %.</div>
+        <input id="effInput" class="eff-input" spellcheck="false" autocomplete="off" maxlength="159" oninput="effPreview()">
+        <div class="eff-chips" id="effChips"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+          <select id="effPreset" onchange="effUsePreset(this.value)">
+            <option value="">Examples&hellip;</option>
+            <option value="runtime / total * 100">Availability = runtime / total &times; 100 (default)</option>
+            <option value="good / parts * 100">Quality = good / parts &times; 100</option>
+            <option value="(runtime / total) * (good / parts) * 100">Availability &times; Quality</option>
+            <option value="(runtime / total) * (IDEAL * parts / runtime) * (good / parts) * 100">OEE = Availability &times; Performance &times; Quality</option>
+          </select>
+          <select id="effRegPick" onchange="if(this.value){effInsert('['+this.value+']');this.value='';}"><option value="">Insert PLC value&hellip;</option></select>
+        </div>
+        <div id="effPrev" class="eff-prev"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn-save-formula" onclick="effSave()">Save Formula</button>
+          <button class="btn-clear-formula" onclick="effDefault()">Use Default</button>
+          <span id="effMsg" style="font-size:12px;font-weight:700;"></span>
+        </div>
+        <div class="mb-info" style="margin-top:10px;">
+          <b>Names:</b> <code>runtime</code>, <code>downtime</code>, <code>total</code> (= runtime + downtime), <code>cycle</code> (last cycle) &mdash; in seconds;
+          <code>parts</code>, <code>rejects</code>, <code>good</code> (= parts &minus; rejects); <code>[AnalogIn1]</code> = a PLC value.
+          Use <code>+ - * / ( )</code> and numbers. For OEE replace <code>IDEAL</code> with the ideal cycle time in seconds (e.g. <code>2.5</code>).
+        </div>
+      </div>
+    </div>
+  </div><!-- /.iot-cols -->
+
+  <div class="iot-col-title" id="cards" style="margin-top:26px;">Dashboard Cards</div>
+  <div class="rs485-section">
+    <div class="mb-info">The <b>Process Metrics</b> cards on the <a href="/">Dashboard</a> &mdash; up to 10. Give each card a name and pick what it monitors. Saved on the board, so everyone sees the same cards.</div>
+    <table class="tile-edit-table">
+      <thead><tr><th>#</th><th>Name</th><th>Monitors</th><th>Unit</th><th>Now</th><th></th></tr></thead>
+      <tbody id="tileEditRows"></tbody>
+    </table>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn-add-reg" id="btnAddTile" onclick="addTileRow()">+ Add card</button>
+      <button class="btn-save-formula" onclick="saveTiles()">Save Cards</button>
+      <button class="btn-clear-formula" onclick="loadTileEditor()">Undo changes</button>
+      <button class="btn-preset" onclick="presetTiles('station')" title="Machine, runtime, downtime, efficiency, cycle, rejects, AnalogIn1/2, E-stop, mode">NX1P2 station cards</button>
+      <button class="btn-clear-formula" onclick="presetTiles('default')">Original 5</button>
+      <span id="tileMsg" style="font-size:12px;font-weight:700;"></span>
+    </div>
+  </div>
+
+  <div class="site-footer">&copy; SHRDC. All rights reserved.</div>
+</div>
+
+<script>
+// ── shared helpers ────────────────────────────────────────────────
+let tcpEnabled = false, rtuEnabled = false;
+function setBadge(id, cls, text){
+  const b=document.getElementById(id); if(!b) return;
+  b.className='device-status-badge '+cls; b.innerHTML='<span class="device-status-dot"></span> '+text;
+}
+function markTransportLive(){}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+const ROLES = [
+  {key:'run',        name:'Machine running',  help:'Level: RUNNING while active, STOPPED while not. If set, leave Start / Stop / Toggle empty.'},
+  {key:'start',      name:'Start',            help:'Becomes active &rarr; RUNNING'},
+  {key:'stop',       name:'Stop',             help:'Becomes active &rarr; STOPPED'},
+  {key:'toggle',     name:'Toggle run/stop',  help:'Becomes active &rarr; switches RUNNING / STOPPED'},
+  {key:'cycleStart', name:'Cycle start',      help:'Becomes active &rarr; cycle timer starts'},
+  {key:'cycleEnd',   name:'Cycle end',        help:'Becomes active &rarr; cycle time = time since cycle start'},
+  {key:'reject',     name:'Reject',           help:'Becomes active &rarr; Rejects +1'},
+];
+const DEFAULT_LABELS = ['Emergency','Start Seq.','Reset Seq.','Pos Start','Pos Middle','Pos End','Metal Detect','Spare'];
+function diLabel(i){ try{ return localStorage.getItem('diLabel_'+i) || DEFAULT_LABELS[i]; }catch(e){ return DEFAULT_LABELS[i]; } }
+let kpi = null, editing = false;
+
+function sourceOptions(sel){
+  let h='<option value="">&mdash; not used &mdash;</option><optgroup label="Board inputs">';
+  for(let i=1;i<=8;i++) h+='<option value="di'+i+'"'+(sel==='di'+i?' selected':'')+'>DI'+i+' &ndash; '+escHtml(diLabel(i-1))+'</option>';
+  h+='</optgroup><optgroup label="PLC (Modbus) on/off registers">';
+  (kpi.regs||[]).forEach(n=>{ const v='mb:'+n; h+='<option value="'+escHtml(v)+'"'+(sel===v?' selected':'')+'>'+escHtml(n)+'</option>'; });
+  if(sel && sel.startsWith('mb:') && !(kpi.regs||[]).includes(sel.slice(3)))
+    h+='<option value="'+escHtml(sel)+'" selected>'+escHtml(sel.slice(3))+' (not in register list!)</option>';
+  return h+'</optgroup>';
+}
+function nowBadge(v,src){
+  if(!src) return '<span style="color:#9ca3af;">&mdash;</span>';
+  if(v===1) return '<span class="mb-badge connected">ACTIVE</span>';
+  if(v===0) return '<span class="mb-badge unknown">not active</span>';
+  return '<span class="mb-badge kpi-nodata" title="Not set, register missing, or no value (polling off / read error)">no data</span>';
+}
+function renderRows(){
+  document.getElementById('kpiRows').innerHTML = ROLES.map(r=>{
+    const c=kpi.roles[r.key]||{src:'',on:true};
+    return '<tr><td><b>'+r.name+'</b><br><small style="color:#6b7280;">'+r.help+'</small></td>'+
+      '<td><select id="src_'+r.key+'" onfocus="editing=true" onchange="editing=true;checkWarn()">'+sourceOptions(c.src)+'</select></td>'+
+      '<td><select id="on_'+r.key+'" onfocus="editing=true" onchange="editing=true"><option value="1"'+(c.on?' selected':'')+'>ON</option><option value="0"'+(c.on?'':' selected')+'>OFF</option></select></td>'+
+      '<td id="now_'+r.key+'">'+nowBadge(c.now,c.src)+'</td></tr>';
+  }).join('');
+  checkWarn();
+}
+function checkWarn(){
+  const w=[]; const v=k=>document.getElementById('src_'+k).value;
+  if(v('run') && (v('start')||v('stop')||v('toggle'))) w.push('"Machine running" is set together with Start/Stop/Toggle &mdash; they will fight. Use one or the other.');
+  if(!!v('cycleStart') !== !!v('cycleEnd')) w.push('Cycle time needs both Cycle start and Cycle end.');
+  const usesMb=ROLES.some(r=>v(r.key).startsWith('mb:'));
+  if(usesMb && kpi && !kpi.polling) w.push('Modbus polling is off &mdash; PLC signals have no data. Turn polling on (Modbus TCP page).');
+  document.getElementById('kpiWarn').innerHTML=w.join('<br>');
+}
+async function loadKpi(first){
+  try{
+    const d=await (await fetch('/getKpi')).json();
+    const listChanged = !kpi || JSON.stringify(kpi.regs)!==JSON.stringify(d.regs);
+    kpi=d;
+    if(first || (!editing && listChanged)) renderRows();
+    else ROLES.forEach(r=>{ const el=document.getElementById('now_'+r.key); const c=d.roles[r.key]||{}; if(el) el.innerHTML=nowBadge(c.now,c.src); });
+    const m=document.getElementById('kMachine'); m.textContent=d.machine;
+    m.className='mb-badge '+(d.machine==='RUNNING'?'connected':d.machine==='STOPPED'?'disconnected':'unknown');
+    document.getElementById('kCycleNow').textContent=d.cycleActive?'(cycle running...)':'';
+  }catch(e){}
+}
+function fmtMs(ms){ const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+  return String(h).padStart(2,'0')+':'+String(m%60).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+async function loadMetrics(){
+  try{
+    const m=await (await fetch('/getMetrics')).json();
+    document.getElementById('kRun').textContent=fmtMs(m.runtime||0);
+    document.getElementById('kDown').textContent=fmtMs(m.downtime||0);
+    document.getElementById('kCycle').textContent=m.cycleTime?(m.cycleTime/1000).toFixed(2)+' s':'--';
+    document.getElementById('kRej').textContent=m.rejects??'--';
+    document.getElementById('kParts').textContent=m.parts??'--';
+    document.getElementById('kGood').textContent=m.good??'--';
+    document.getElementById('kEff').textContent=(m.eff!==null&&m.eff!==undefined)?Number(m.eff).toFixed(1)+' %':'--';
+    document.getElementById('kEffF').textContent=(m.eff===null&&m.effErr?'('+m.effErr+') ':'')+(m.formula||'');
+    lastMetrics=m; effPreview(true);
+  }catch(e){}
+}
+async function saveKpi(){
+  const msg=document.getElementById('kpiMsg'); msg.style.color='#555'; msg.textContent='Saving...';
+  const roles={}; ROLES.forEach(r=>{ roles[r.key]={src:document.getElementById('src_'+r.key).value, on:document.getElementById('on_'+r.key).value==='1'}; });
+  try{
+    const r=await fetch('/saveKpi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roles})});
+    if(!r.ok) throw new Error(await r.text());
+    msg.style.color='#16a34a'; msg.textContent='Saved'; editing=false; setTimeout(()=>{msg.textContent='';},2500);
+    await loadKpi(true);
+  }catch(e){ msg.style.color='#dc2626'; msg.textContent=e.message||'Save failed'; }
+}
+function setRole(k,src,on){ const s=document.getElementById('src_'+k);
+  if(src.startsWith('mb:') && ![...s.options].some(o=>o.value===src)) s.insertAdjacentHTML('beforeend','<option value="'+escHtml(src)+'">'+escHtml(src.slice(3))+' (not in register list!)</option>');
+  s.value=src; document.getElementById('on_'+k).value=on?'1':'0'; }
+function presetStation(){
+  editing=true;
+  setRole('run','mb:TL_3_G',true); setRole('start','',true); setRole('stop','',true); setRole('toggle','',true);
+  setRole('cycleStart','mb:B1',true); setRole('cycleEnd','mb:B3',true); setRole('reject','mb:B4',true);
+  checkWarn(); document.getElementById('kpiMsg').textContent='Preset filled in - press Save';
+}
+function presetDefaults(){
+  editing=true;
+  setRole('run','',true); setRole('start','di2',true); setRole('stop','di3',true); setRole('toggle','di1',false);
+  setRole('cycleStart','di4',true); setRole('cycleEnd','di6',true); setRole('reject','di7',true);
+  checkWarn(); document.getElementById('kpiMsg').textContent='Original wiring filled in - press Save';
+}
+
+// ══════════ Efficiency formula (same rules as the firmware) ══════════
+let lastMetrics=null, effRegs=[], effSaved='';
+function effEval(f, m, regs){
+  let i=0; const src=f;
+  const skip=()=>{ while(src[i]===' '||src[i]==='\t') i++; };
+  const fail=msg=>{ throw new Error(msg); };
+  const vars={ runtime:(m.runtime||0)/1000, downtime:(m.downtime||0)/1000, total:((m.runtime||0)+(m.downtime||0))/1000,
+               cycle:(m.cycleTime||0)/1000, parts:m.parts||0, rejects:m.rejects||0, good:m.good||0 };
+  function factor(){
+    skip(); const c=src[i];
+    if(c==='('){ i++; const v=expr(); skip(); if(src[i]!==')') fail('missing )'); i++; return v; }
+    if(c==='-'){ i++; return -factor(); } if(c==='+'){ i++; return factor(); }
+    if(/[0-9.]/.test(c||'')){ const mm=/^[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?|^[0-9]+\.?/.exec(src.slice(i)); if(!mm) fail('bad number'); i+=mm[0].length; return parseFloat(mm[0]); }
+    if(c==='['){ const j=src.indexOf(']',i); if(j<0) fail('missing ]'); const name=src.slice(i+1,j); i=j+1;
+      const r=regs.find(x=>x.name===name); if(!r) fail('unknown register "'+name+'"'); if(!r.ok) fail('"'+name+'" has no value'); return Number(r.val); }
+    if(/[A-Za-z]/.test(c||'')){ const mm=/^[A-Za-z0-9_]+/.exec(src.slice(i)); i+=mm[0].length; const w=mm[0].toLowerCase();
+      if(w in vars) return vars[w]; fail('unknown name "'+mm[0]+'"'); }
+    fail(c===undefined?'formula is incomplete':'unexpected "'+c+'"');
+  }
+  function term(){ let v=factor(); for(;;){ skip(); const op=src[i]; if(op!=='*'&&op!=='/') return v; i++; const r=factor(); if(op==='*') v*=r; else { if(r===0) fail('division by zero'); v/=r; } } }
+  function expr(){ let v=term(); for(;;){ skip(); const op=src[i]; if(op!=='+'&&op!=='-') return v; i++; const r=term(); v= op==='+'? v+r : v-r; } }
+  const v=expr(); skip(); if(i<src.length) fail('unexpected "'+src[i]+'"');
+  if(!isFinite(v)) fail('not a number'); return v;
+}
+function effPreview(fromTimer){
+  const inp=document.getElementById('effInput'), out=document.getElementById('effPrev');
+  if(!inp||!lastMetrics) return;
+  const f=inp.value.trim()||'runtime / total * 100';
+  try{ const v=effEval(f,lastMetrics,effRegs); out.className='eff-prev ok'; out.textContent='Result now: '+v.toFixed(2)+' %'+(inp.value.trim()!==effSaved?'   (not saved yet)':''); }
+  catch(e){
+    const soft=/division by zero|has no value/.test(e.message);
+    out.className='eff-prev '+(soft?'warn':'err');
+    out.textContent=soft ? 'Formula OK - no result yet ('+e.message+', e.g. nothing counted yet)' : 'Error: '+e.message;
+  }
+}
+function effInsert(txt){
+  const inp=document.getElementById('effInput'); const a=inp.selectionStart??inp.value.length, b=inp.selectionEnd??a;
+  const pad=(a>0&&!/[\s(]/.test(inp.value[a-1]))?' ':'';
+  inp.value=inp.value.slice(0,a)+pad+txt+inp.value.slice(b); inp.focus(); const pos=a+pad.length+txt.length; inp.setSelectionRange(pos,pos); effPreview();
+}
+function effUsePreset(v){ if(!v) return; document.getElementById('effInput').value=v; document.getElementById('effPreset').value='';
+  if(v.includes('IDEAL')){ const k=v.indexOf('IDEAL'); const inp=document.getElementById('effInput'); inp.focus(); inp.setSelectionRange(k,k+5); }
+  effPreview(); }
+async function effSave(){
+  const msg=document.getElementById('effMsg'), f=document.getElementById('effInput').value.trim();
+  if(/IDEAL/.test(f)){ msg.style.color='#dc2626'; msg.textContent='Replace IDEAL with the ideal cycle time in seconds'; return; }
+  msg.style.color='#555'; msg.textContent='Saving...';
+  try{
+    const r=await fetch('/saveEffFormula',{method:'POST',body:new URLSearchParams({formula:f})});
+    const t=await r.text(); if(!r.ok) throw new Error(t);
+    effSaved=f||'runtime / total * 100'; document.getElementById('effInput').value=effSaved;
+    msg.style.color='#16a34a'; msg.textContent='Saved'; setTimeout(()=>{msg.textContent='';},2500); loadMetrics();
+  }catch(e){ msg.style.color='#dc2626'; msg.textContent=e.message||'Save failed'; }
+}
+function effDefault(){ document.getElementById('effInput').value='runtime / total * 100'; effPreview(); }
+async function effInit(){
+  try{
+    const [k,regs]=await Promise.all([fetch('/getKpi').then(r=>r.json()), fetch('/getRS485Regs').then(r=>r.json())]);
+    effRegs=regs; effSaved=k.formula||'runtime / total * 100';
+    document.getElementById('effInput').value=effSaved;
+    document.getElementById('effChips').innerHTML=['runtime','downtime','total','cycle','parts','rejects','good','+','-','*','/','(',')','100']
+      .map(w=>'<button type="button" onclick="effInsert(\''+w+'\')">'+w+'</button>').join('');
+    document.getElementById('effRegPick').innerHTML='<option value="">Insert PLC value&hellip;</option>'+regs.filter(r=>r.en).map(r=>'<option>'+escHtml(r.name)+'</option>').join('');
+    effPreview();
+  }catch(e){}
+}
+setInterval(async()=>{ if(document.visibilityState==='hidden') return; try{ effRegs=await (await fetch('/getRS485Regs')).json(); tileRegs=effRegs; renderTileNow(); }catch(e){} }, 2000);
+
+// ══════════ Dashboard cards (moved here from the Dashboard) ══════════
+const MAX_TILES = 10;
+const DEFAULT_TILES = [{name:'Runtime',src:'kpi:runtime'},{name:'Downtime',src:'kpi:downtime'},{name:'Cycle Time',src:'kpi:cycle'},{name:'Rejects',src:'kpi:rejects'},{name:'Efficiency',src:'kpi:eff'}];
+const STATION_TILES = [{name:'Machine',src:'kpi:machine'},{name:'Runtime',src:'kpi:runtime'},{name:'Downtime',src:'kpi:downtime'},{name:'Efficiency',src:'kpi:eff'},
+  {name:'Cycle Time',src:'kpi:cycle'},{name:'Rejects',src:'kpi:rejects'},{name:'Analog input 1',src:'mb:AnalogIn1'},{name:'Analog input 2',src:'mb:AnalogIn2'},
+  {name:'E-stop',src:'mb:ES0'},{name:'Mode',src:'mb:MODE_AUTO_MAN'}];
+const KPI_SRC = [['kpi:machine','Machine state (RUNNING / STOPPED)'],['kpi:runtime','Runtime'],['kpi:downtime','Downtime'],['kpi:cycle','Last cycle time'],
+  ['kpi:parts','Parts (completed cycles)'],['kpi:good','Good parts'],['kpi:rejects','Rejects'],['kpi:eff','Efficiency']];
+let editTiles=[], tileRegs=[];
+function tileSourceOptions(sel){
+  const o=(v,t)=>'<option value="'+escHtml(v)+'"'+(v===sel?' selected':'')+'>'+escHtml(t)+'</option>';
+  let h='<optgroup label="KPIs">'+KPI_SRC.map(x=>o(x[0],x[1])).join('')+'</optgroup>';
+  const regs=tileRegs.filter(r=>r.en);
+  if(regs.length){
+    h+='<optgroup label="PLC (Modbus) values">'+regs.map(r=>o('mb:'+r.name,r.name+((r.fc===1||r.fc===2)?' (on/off)':''))).join('')+'</optgroup>';
+    const bits=regs.filter(r=>r.fc===1||r.fc===2);
+    if(bits.length) h+='<optgroup label="PLC signal: time in current state">'+bits.map(r=>o('mbfor:'+r.name,r.name+' — time in state')).join('')+'</optgroup>';
+  }
+  if(sel&&(sel.startsWith('mb:')||sel.startsWith('mbfor:'))&&!regs.some(r=>sel.endsWith(':'+r.name))) h+='<optgroup label="Missing">'+o(sel,sel.split(':')[1]+' (not in register list!)')+'</optgroup>';
+  let di='',dc='',dout='';
+  for(let i=1;i<=8;i++){ const lb=diLabel(i-1); di+=o('di:'+i,'DI'+i+' – '+lb); dc+=o('dicnt:'+i,'DI'+i+' – '+lb+' count')+o('diton:'+i,'DI'+i+' – '+lb+' ON time'); dout+=o('do:'+i,'DO'+i); }
+  return h+'<optgroup label="Board inputs">'+di+'</optgroup><optgroup label="Board input counters">'+dc+'</optgroup><optgroup label="Board outputs">'+dout+'</optgroup>';
+}
+function autoName(src){
+  const k=KPI_SRC.find(x=>x[0]===src); if(k) return ({'kpi:machine':'Machine','kpi:cycle':'Cycle Time','kpi:parts':'Parts'})[src]||k[1];
+  if(src.startsWith('mbfor:')) return src.slice(6)+' for';
+  if(src.startsWith('mb:')) return src.slice(3);
+  if(src.startsWith('di:')) return diLabel(+src.slice(3)-1);
+  if(src.startsWith('dicnt:')) return diLabel(+src.slice(6)-1)+' count';
+  if(src.startsWith('diton:')) return diLabel(+src.slice(6)-1)+' ON time';
+  if(src.startsWith('do:')) return 'DO'+src.slice(3);
+  return '';
+}
+// current value of a card source (for the "Now" column)
+function tileNow(src){
+  const m=lastMetrics||{};
+  switch(src){
+    case 'kpi:machine': return kpi&&kpi.machine||'--';
+    case 'kpi:runtime': return fmtMs(m.runtime||0); case 'kpi:downtime': return fmtMs(m.downtime||0);
+    case 'kpi:cycle': return m.cycleTime?(m.cycleTime/1000).toFixed(2)+' s':'--';
+    case 'kpi:parts': return String(m.parts??'--'); case 'kpi:good': return String(m.good??'--'); case 'kpi:rejects': return String(m.rejects??'--');
+    case 'kpi:eff': return (m.eff!==null&&m.eff!==undefined)?Number(m.eff).toFixed(1)+' %':'--';
+  }
+  if(src.startsWith('mb:')||src.startsWith('mbfor:')){
+    const r=tileRegs.find(x=>x.name===src.slice(src.indexOf(':')+1)); if(!r) return 'not found'; if(!r.ok) return '--';
+    const bit=r.fc===1||r.fc===2;
+    if(src.startsWith('mbfor:')) return bit&&r.since>=0?r.since+' s':'--';
+    return bit?(r.val?(r.on||'ON'):(r.off||'OFF')):String(r.val);
+  }
+  if(src.startsWith('di:')&&kpi&&kpi.di){ return kpi.di[+src.slice(3)-1]?'ON':'OFF'; }
+  return '';
+}
+function renderTileNow(){ editTiles.forEach((t,i)=>{ const e=document.getElementById('tNow'+i), s=document.getElementById('tS'+i); if(e&&s) e.textContent=tileNow(s.value); }); }
+function readEditRows(){ editTiles=editTiles.map((t,i)=>({name:document.getElementById('tN'+i).value.trim(), src:document.getElementById('tS'+i).value, unit:document.getElementById('tU'+i).value.trim()})); }
+function renderEditRows(){
+  document.getElementById('tileEditRows').innerHTML=editTiles.map((t,i)=>'<tr><td>'+(i+1)+'</td>'+
+    '<td><input id="tN'+i+'" maxlength="24" value="'+escHtml(t.name||'')+'" placeholder="card name"></td>'+
+    '<td><select id="tS'+i+'" onchange="onTileSrc('+i+')">'+tileSourceOptions(t.src||'kpi:runtime')+'</select></td>'+
+    '<td><input id="tU'+i+'" maxlength="8" value="'+escHtml(t.unit||'')+'" placeholder="e.g. °C" title="Unit after PLC number values"></td>'+
+    '<td id="tNow'+i+'" class="tile-now"></td>'+
+    '<td><button onclick="moveTile('+i+',-1)" title="Up">&#8593;</button> <button onclick="moveTile('+i+',1)" title="Down">&#8595;</button> <button onclick="delTile('+i+')" title="Remove">&#10005;</button></td></tr>').join('')
+    || '<tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:12px;">No cards &mdash; click + Add card or a preset.</td></tr>';
+  document.getElementById('btnAddTile').disabled = editTiles.length>=MAX_TILES;
+  renderTileNow();
+}
+function onTileSrc(i){
+  const n=document.getElementById('tN'+i), old=editTiles[i], src=document.getElementById('tS'+i).value;
+  if(!n.value.trim() || n.value.trim()===autoName(old.src||'')) n.value=autoName(src);
+  editTiles[i]={name:n.value, src, unit:document.getElementById('tU'+i).value}; renderTileNow();
+}
+function addTileRow(){ readEditRows(); if(editTiles.length>=MAX_TILES) return; editTiles.push({name:'Runtime',src:'kpi:runtime',unit:''}); renderEditRows(); }
+function delTile(i){ readEditRows(); editTiles.splice(i,1); renderEditRows(); }
+function moveTile(i,d){ readEditRows(); const j=i+d; if(j<0||j>=editTiles.length) return; [editTiles[i],editTiles[j]]=[editTiles[j],editTiles[i]]; renderEditRows(); }
+function presetTiles(which){ editTiles=JSON.parse(JSON.stringify(which==='station'?STATION_TILES:DEFAULT_TILES)); renderEditRows();
+  const m=document.getElementById('tileMsg'); m.style.color='#555'; m.textContent='Filled in - press Save Cards'; }
+async function loadTileEditor(){
+  let saved=null;
+  try{ const [t,regs]=await Promise.all([fetch('/getTiles').then(r=>r.json()), fetch('/getRS485Regs').then(r=>r.json())]); saved=Array.isArray(t)?t:null; tileRegs=regs; }catch(e){}
+  editTiles=JSON.parse(JSON.stringify(saved||DEFAULT_TILES)); renderEditRows(); document.getElementById('tileMsg').textContent='';
+}
+async function saveTiles(){
+  readEditRows();
+  const list=editTiles.filter(t=>t.src).map(t=>({name:(t.name||autoName(t.src)).slice(0,24), src:t.src, unit:(t.unit||'').slice(0,8)}));
+  const msg=document.getElementById('tileMsg'); msg.style.color='#555'; msg.textContent='Saving...';
+  try{
+    const r=await fetch('/saveTiles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(list)});
+    if(!r.ok) throw new Error(await r.text());
+    msg.style.color='#16a34a'; msg.innerHTML='Saved &mdash; see the <a href="/">Dashboard</a>';
+  }catch(e){ msg.style.color='#dc2626'; msg.textContent=e.message||'Save failed'; }
+}
+effInit(); loadTileEditor();
+loadKpi(true); loadMetrics();
+setInterval(()=>{if(document.visibilityState!=='hidden')loadKpi(false);}, 1000);
+setInterval(()=>{if(document.visibilityState!=='hidden')loadMetrics();}, 1000);
+
+</script>
+</body>
+</html>

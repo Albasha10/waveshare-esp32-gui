@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Signal Status</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .mb-table-wrap { display:flex; gap:20px; align-items:flex-start; overflow-x:auto; }
+    .mb-table-wrap .mb-table { flex:1; min-width:0; margin-top:0; }
+    @media (max-width: 900px) { .mb-table-wrap { flex-direction:column; gap:0; } .mb-table-wrap .mb-table { width:100%; } #mbTable2 thead { display:none; } }
+    .mb-table td:nth-child(1) { color:#9ca3af; width:36px; }
+    .mb-table td:nth-child(4) { font-family:monospace; color:#6b7280; }
+    .mb-table .mb-val-num { font-family:monospace; font-weight:700; font-size:14px; color:#111827; }
+    .mb-table .mb-err { color:#b91c1c; font-size:12px; font-weight:600; }
+    .mb-table .mb-wait { color:#9ca3af; }
+    .mb-empty { text-align:center; color:#9ca3af; padding:18px !important; }
+    .mb-badge { font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; }
+    .mb-badge.connected    { background:#dcfce7; color:#15803d; }
+    .mb-badge.disconnected { background:#fee2e2; color:#b91c1c; }
+    .mb-badge.unknown      { background:#f3f4f6; color:#6b7280; }
+    .mb-config-link { font-size:12px; font-weight:600; color:#2563eb; text-decoration:none; border:1px solid #2563eb; border-radius:6px; padding:4px 10px; }
+    .mb-config-link:hover { background:#eff6ff; }
+    .mb-table td.mb-for { color:#6b7280; font-family:monospace; white-space:nowrap; }
+    .mb-foot { font-size:11px; color:#9ca3af; margin:6px 2px 0; }
+    .mb-table tr.mb-flash td { transition:background .6s; background:#fef9c3; }
+    .io-label { color:#6b7280; font-size:12px; margin-left:10px; flex:1; text-align:left; }
+  </style>
+</head>
+<body>
+
+<nav class="topnav">
+  <img src="/shrdc_logo.png" alt="SHRDC">
+  <div class="topnav-links">
+    <a href="/"         class="nav-link">Dashboard</a>
+    <a href="/kpi"      class="nav-link">KPI</a>
+    <a href="/signals"  class="nav-link active">Signal Status</a>
+    <a href="/iot"      class="nav-link">IoT Config</a>
+    <a href="/modbus"   class="nav-link">Modbus TCP</a>
+    <a href="/tagoio"   class="nav-link">TagoIO</a>
+    <a href="/sdcard"   class="nav-link">SD Card</a>
+    <a href="/telegram" class="nav-link">Telegram</a>
+  </div>
+  <img src="/msf_logo.png" alt="MSF">
+  <div class="topnav-right">
+    <a href="/logout" class="btn-logout">Logout</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="dash-header">
+    <h1 class="dash-title">Signal Status</h1>
+  </div>
+
+  <!-- Digital I/O of this board -->
+  <div class="section-title" style="margin-top:4px;">Digital I/O (this board)</div>
+  <div class="io-wrapper">
+    <div class="io-box">
+      <h2>Digital Inputs</h2>
+      <div id="diItems"></div>
+    </div>
+    <div class="io-box">
+      <h2>Digital Outputs</h2>
+      <div id="doItems"></div>
+    </div>
+  </div>
+
+
+  <!-- Modbus live data (registers configured on IoT Config) -->
+  <div class="section-title" style="margin-top:22px;">
+    PLC (Modbus) Signals
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span class="info-chip" id="mbSource">Source: --</span>
+      <span id="mbBadge" class="mb-badge unknown">&#9679; --</span>
+      <a href="/modbus" class="mb-config-link">Configure</a>
+    </div>
+  </div>
+  <div class="mb-table-wrap">
+    <table class="mon-table mb-table">
+      <thead><tr><th>#</th><th>Name</th><th>Type</th><th>Address</th><th>Value</th><th title="Time in the current state">For</th></tr></thead>
+      <tbody id="mbTableBody"><tr><td colspan="6" class="mb-empty">Loading...</td></tr></tbody>
+    </table>
+    <table class="mon-table mb-table" id="mbTable2" style="display:none;">
+      <thead><tr><th>#</th><th>Name</th><th>Type</th><th>Address</th><th>Value</th><th title="Time in the current state">For</th></tr></thead>
+      <tbody id="mbTableBody2"></tbody>
+    </table>
+  </div>
+  <div class="mb-foot" id="mbFoot"></div>
+
+
+  <div class="site-footer">&copy; SHRDC. All rights reserved.</div>
+</div>
+
+<script>
+const DEFAULT_LABELS = ['Emergency','Start Seq.','Reset Seq.','Pos Start','Pos Middle','Pos End','Metal Detect','Spare'];
+function getDiLabel(i) { try{ return localStorage.getItem('diLabel_'+i) || DEFAULT_LABELS[i]; }catch(e){ return DEFAULT_LABELS[i]; } }
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toggle(ch) { fetch('/toggle?ch='+ch).catch(e=>console.error(e)); }
+// ── Build I/O rows (no LEDs on DI) ───────────────────────────────
+(function buildIO() {
+  const diDiv = document.getElementById('diItems');
+  const doDiv = document.getElementById('doItems');
+  for (let i = 0; i < 8; i++) {
+    diDiv.innerHTML +=
+      '<div class="io-item">' +
+        '<span class="io-ch">DI'+(i+1)+'</span><span class="io-label">'+escHtml(getDiLabel(i))+'</span>' +
+        '<span class="di-status off" id="di'+i+'">OFF</span>' +
+      '</div>';
+    doDiv.innerHTML +=
+      '<div class="io-item">' +
+        '<span class="io-ch">DO'+(i+1)+'</span>' +
+        '<span class="do-status off" id="do'+i+'">OFF</span>' +
+        '<span class="do-rule-badge rule-on" id="doRuleBadge'+i+'" style="display:none;">Rule</span>' +
+        '<button onclick="toggle('+i+')" style="margin-left:4px;font-size:11px;padding:2px 8px;">Toggle</button>' +
+      '</div>';
+  }
+})();
+
+
+// DI / DO states
+async function fetchIO(){
+  try{
+    const d=await(await fetch('/status')).json();
+    d.inputs.forEach((v,i)=>{ const b=document.getElementById('di'+i); if(b){ b.textContent=v?'ON':'OFF'; b.className=v?'di-status on':'di-status off'; } });
+    d.outputs.forEach((v,i)=>{ const el=document.getElementById('do'+i); if(el){ el.textContent=v?'ON':'OFF'; el.className=v?'do-status on':'do-status off'; } });
+  }catch(e){}
+}
+// "Rule" badge on DOs that a logic rule controls (rules are edited on the Dashboard)
+async function loadRuleBadges(){
+  try{
+    const rules=await (await fetch('/getDoRules')).json();
+    for(let i=0;i<8;i++){ const b=document.getElementById('doRuleBadge'+i); if(b) b.style.display=rules.some(r=>r.doIdx===i&&r.enabled)?'':'none'; }
+  }catch(e){}
+}
+let _ioBusy=false;
+setInterval(async()=>{ if(document.visibilityState==='hidden'||_ioBusy) return; _ioBusy=true; try{ await fetchIO(); } finally{ _ioBusy=false; } }, 500);
+fetchIO(); loadRuleBadges(); setInterval(loadRuleBadges, 10000);
+
+// ── Modbus live data ──────────────────────────────────────────────
+// "3m 12s", "1h 05m", "2d 3h" - time a signal has been in its current state
+function fmtSince(s){
+  if(s===undefined||s===null||s<0) return '';
+  if(s<60) return s+'s';
+  const m=Math.floor(s/60); if(m<60) return m+'m '+String(s%60).padStart(2,'0')+'s';
+  const h=Math.floor(m/60); if(h<24) return h+'h '+String(m%60).padStart(2,'0')+'m';
+  return Math.floor(h/24)+'d '+(h%24)+'h';
+}
+
+const MB_FC = {1:'Coil',2:'Discrete In',3:'Holding Reg',4:'Input Reg'};
+let mbSig = '', mbPrev = [], mbSrc = 'off';
+function mbFormat(r){
+  if(r.val===null||r.val===undefined) return null;
+  if(r.fc===1||r.fc===2) return r.val ? (r.on||'ON') : (r.off||'OFF');
+  const v=parseFloat(r.val);
+  return (r.dt===0||r.dt===1) ? String(Math.round(v)) : v.toPrecision(6).replace(/\.?0+$/,'');
+}
+function mbSetBadge(cls, text){ const b=document.getElementById('mbBadge'); b.className='mb-badge '+cls; b.innerHTML='&#9679; '+text; }
+async function fetchMbSource(){
+  try{
+    const [t,r]=await Promise.all([fetch('/getModbusTCP').then(x=>x.json()), fetch('/getRS485').then(x=>x.json())]);
+    if(t.enabled){ mbSrc='tcp'; document.getElementById('mbSource').innerHTML='<b>Source:</b> Modbus TCP &middot; '+escHtml(t.ip)+':'+t.port; }
+    else if(r.enabled){ mbSrc='rtu'; document.getElementById('mbSource').innerHTML='<b>Source:</b> RS485 &middot; slave '+escHtml(r.addr); }
+    else { mbSrc='off'; document.getElementById('mbSource').innerHTML='<b>Source:</b> polling off'; }
+  }catch(e){}
+}
+async function fetchModbus(){
+  try{
+    const d=await(await fetch('/getRS485Regs')).json();
+    const list=d.filter(r=>r.en);
+    const body=document.getElementById('mbTableBody'), body2=document.getElementById('mbTableBody2'), t2=document.getElementById('mbTable2');
+    if(!list.length){
+      mbSig=''; t2.style.display='none'; body2.innerHTML=''; body.innerHTML='<tr><td colspan="6" class="mb-empty">No Modbus registers yet &mdash; add them on the <a href="/modbus">Modbus TCP</a> page (or click &ldquo;Load station preset&rdquo; there).</td></tr>';
+      mbSetBadge('unknown','No registers'); return;
+    }
+    const sig=list.map(r=>r.name+'|'+r.fc+'|'+r.addr).join(',');
+    if(sig!==mbSig){   // rebuild rows only when the register list changes
+      mbSig=sig; mbPrev=[];
+      const rows=list.map((r,i)=>'<tr id="mbRow'+i+'"><td>'+(i+1)+'</td><td><b>'+escHtml(r.name)+'</b></td><td>'+(MB_FC[r.fc]||('FC'+r.fc))+
+        '</td><td>'+r.addr+'</td><td id="mbVal'+i+'"></td><td id="mbFor'+i+'" class="mb-for"></td></tr>');
+      const half = rows.length>8 ? Math.ceil(rows.length/2) : rows.length;   // two columns when the list is long
+      body.innerHTML=rows.slice(0,half).join(''); body2.innerHTML=rows.slice(half).join('');
+      t2.style.display = rows.length>half ? '' : 'none';
+    }
+    let okN=0;
+    list.forEach((r,i)=>{
+      const cell=document.getElementById('mbVal'+i); if(!cell) return;
+      const v=mbFormat(r);
+      if(r.ok&&v!==null){
+        okN++;
+        if(r.fc===1||r.fc===2) cell.innerHTML='<span class="di-status '+(r.val?'on':'off')+'">'+escHtml(v)+'</span>';
+        else cell.innerHTML='<span class="mb-val-num">'+escHtml(v)+'</span>';
+      } else cell.innerHTML = mbSrc==='off' ? '<span class="mb-wait">--</span>' : '<span class="mb-err">no reply</span>';
+      const fc=document.getElementById('mbFor'+i);
+      if(fc) fc.textContent = ((r.fc===1||r.fc===2) && r.ok) ? fmtSince(r.since) : '';
+      if(mbPrev[i]!==undefined && mbPrev[i]!==v){ const row=document.getElementById('mbRow'+i); row.classList.add('mb-flash'); setTimeout(()=>row.classList.remove('mb-flash'),700); }
+      mbPrev[i]=v;
+    });
+    if(mbSrc==='off') mbSetBadge('unknown','Polling off');
+    else if(okN) mbSetBadge('connected', okN===list.length ? 'Connected' : okN+'/'+list.length+' OK');
+    else mbSetBadge('disconnected','No reply');
+    document.getElementById('mbFoot').textContent=list.length+' registers · updated '+new Date().toLocaleTimeString();
+  }catch(e){}
+}
+let _mbBusy=false;
+async function fetchModbusGuarded(){ if(_mbBusy) return; _mbBusy=true; try{ await fetchModbus(); } finally{ _mbBusy=false; } }
+fetchMbSource().then(fetchModbusGuarded);
+setInterval(()=>{if(document.visibilityState!=='hidden')fetchModbusGuarded();},1000);
+setInterval(()=>{if(document.visibilityState!=='hidden')fetchMbSource();},5000);
+
+</script>
+</body>
+</html>
